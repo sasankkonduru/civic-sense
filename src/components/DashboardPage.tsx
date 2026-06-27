@@ -9,6 +9,28 @@ import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db, updateFirestoreIssue, uploadBase64ToStorage, seedDemoIssuesIfEmpty } from "../firebase";
 import { Issue, AIInsight, DashboardStats, MunicipalInsights, MunicipalDailyBrief } from "../types";
 import { IssueMap } from "./IssueMap";
+const STAGES = [
+  { name: "Citizen Reported", value: "Reported" },
+  { name: "Assigned", value: "Assigned" },
+  { name: "Under Review", value: "Under Review" },
+  { name: "In Progress", value: "In Progress" },
+  { name: "Resolved", value: "Resolved" },
+  { name: "AI Verification", value: "AI Verification" },
+  { name: "Closed", value: "Verified & Closed" }
+];
+
+const getStatusStep = (status: string | undefined): number => {
+  if (!status) return 0;
+  const s = status.toLowerCase();
+  if (s === "submitted" || s === "reported") return 0;
+  if (s === "assigned") return 1;
+  if (s === "under review") return 2;
+  if (s === "in progress") return 3;
+  if (s === "resolved") return 4;
+  if (s === "ai verification" || s === "resolved (pending ai verification)") return 5;
+  if (s === "verified & closed" || s === "closed") return 6;
+  return 0;
+};
 
 // Design System Components
 import Button from "./ui/Button";
@@ -472,12 +494,12 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
 
       // Compute statistics locally
       const totalCount = list.length;
-      const resolvedCount = list.filter((i) => i.status === "Resolved" || i.status === "Verified & Closed" || i.status === "Verified").length;
-      const openCount = list.filter((i) => i.status !== "Resolved" && i.status !== "Verified & Closed" && i.status !== "Verified").length;
+      const resolvedCount = list.filter((i) => i.status === "Verified & Closed" || i.status === "Closed").length;
+      const openCount = list.filter((i) => i.status !== "Verified & Closed" && i.status !== "Closed").length;
       const criticalCount = list.filter((i) => i.severity === "Critical").length;
-      const pendingVerificationCount = list.filter((i) => i.status === "Reported" || i.status === "Under Review" || i.status === "Submitted").length;
+      const pendingVerificationCount = list.filter((i) => i.status === "Resolved" || i.status === "AI Verification").length;
 
-      const resolvedIssuesList = list.filter((i) => i.status === "Resolved" || i.status === "Verified & Closed" || i.status === "Verified");
+      const resolvedIssuesList = list.filter((i) => i.status === "Verified & Closed" || i.status === "Closed");
       let totalResolutionTimeMs = 0;
       let resolvedWithTimeCount = 0;
       resolvedIssuesList.forEach((i) => {
@@ -1590,6 +1612,69 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                   </div>
                 </div>
 
+                {/* Interactive Triage Progress Timeline */}
+                <div className="bg-slate-900/10 border border-slate-900 rounded-3xl p-5 space-y-4">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Triage Progress Timeline</span>
+                  <div className="relative border-l-2 border-slate-900/80 ml-3 pl-6 space-y-4 py-1">
+                    {STAGES.map((stage, idx) => {
+                      const currentStep = getStatusStep(selectedIssue.status);
+                      const isCompleted = idx < currentStep;
+                      const isActive = idx === currentStep;
+                      const isOfficial = currentUser?.role === "official";
+                      const canTransition = isOfficial && idx !== currentStep;
+                      
+                      const isCloseStage = stage.value === "Verified & Closed";
+                      const verificationSuccess = selectedIssue.resolutionVerification?.status === "Resolved";
+                      const isDisabledClose = isCloseStage && !verificationSuccess;
+
+                      return (
+                        <div 
+                          key={idx} 
+                          onClick={() => {
+                            if (canTransition && !isDisabledClose) {
+                              handleUpdateStatus(selectedIssue.id, stage.value);
+                            }
+                          }}
+                          className={`relative flex flex-col items-start text-xs transition-all ${
+                            canTransition && !isDisabledClose ? "cursor-pointer hover:translate-x-1" : "cursor-default"
+                          }`}
+                          title={isDisabledClose ? "Successful AI verification is required to Close this ticket." : ""}
+                        >
+                          {/* Dot indicator */}
+                          <div className={`absolute left-[-31px] top-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            isCompleted ? "bg-emerald-500 border-emerald-400 text-white" :
+                            isActive ? "bg-indigo-500 border-indigo-400 text-white animate-pulse" :
+                            "bg-slate-950 border-slate-800"
+                          }`}>
+                            {isCompleted && <Check className="w-2 h-2" />}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`font-bold uppercase tracking-wider text-[10px] ${
+                              isActive ? "text-indigo-400 font-black" :
+                              isCompleted ? "text-slate-300" : "text-slate-500"
+                            }`}>
+                              {stage.name}
+                            </span>
+
+                            {isActive && (
+                              <span className="text-[7.5px] bg-indigo-950 text-indigo-400 px-1.5 py-0.2 rounded border border-indigo-900/30 uppercase font-bold font-mono">
+                                Current
+                              </span>
+                            )}
+
+                            {isDisabledClose && (
+                              <span className="text-[7.5px] bg-red-950/20 text-red-400 px-1.5 py-0.2 rounded border border-red-900/30 uppercase font-bold font-mono">
+                                Locked (AI Audit Req.)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Description */}
                 <div className="space-y-2">
                   <span className="text-xs font-bold text-slate-550 uppercase tracking-wider block font-mono">Description</span>
@@ -1825,7 +1910,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                         </button>
                       </div>
                     </div>
-                  ) : (
+                  ) : getStatusStep(selectedIssue.status) >= 4 ? (
                     <div className="bg-slate-900/10 border border-slate-900 rounded-2xl p-4 space-y-3">
                       <p className="text-xs text-slate-450 text-center leading-relaxed font-medium">
                         Upload a post-repair verification image to let Gemini Vision confirm the resolution status.
@@ -1888,6 +1973,10 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                         <p className="text-xs text-red-400 font-semibold text-center">{resolutionError}</p>
                       )}
                     </div>
+                  ) : (
+                    <div className="bg-slate-905/30 border border-slate-900 rounded-2xl p-4 text-center text-xs text-slate-500 font-semibold font-sans py-6">
+                      Resolution verification will become available once the issue status reaches <span className="text-indigo-400 font-bold">Resolved</span>.
+                    </div>
                   )}
                 </div>
 
@@ -1901,20 +1990,31 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                         Update Pipeline Status:
                       </p>
                       <div className="grid grid-cols-2 gap-2">
-                        {["Under Review", "Assigned", "In Progress", "Resolved", "Verified & Closed"].map((status) => (
-                          <Button
-                            key={status}
-                            id={`status-update-${status.replace(/\s+/g, "-")}`}
-                            onClick={() => handleUpdateStatus(selectedIssue.id, status)}
-                            disabled={updatingStatus === selectedIssue.id}
-                            variant={selectedIssue.status === status ? "primary" : "secondary"}
-                            size="sm"
-                            className={`rounded-xl justify-center ${status === "Verified & Closed" ? "col-span-2" : ""}`}
-                            leftIcon={selectedIssue.status === status ? <Check className="w-3.5 h-3.5 text-white" /> : undefined}
-                          >
-                            <span>{status}</span>
-                          </Button>
-                        ))}
+                        {["Reported", "Assigned", "Under Review", "In Progress", "Resolved", "AI Verification", "Verified & Closed"].map((status) => {
+                          const isClose = status === "Verified & Closed";
+                          const verificationSuccess = selectedIssue.resolutionVerification?.status === "Resolved";
+                          const isLocked = isClose && !verificationSuccess;
+
+                          return (
+                            <Button
+                              key={status}
+                              id={`status-update-${status.replace(/\s+/g, "-")}`}
+                              onClick={() => {
+                                if (!isLocked) {
+                                  handleUpdateStatus(selectedIssue.id, status);
+                                }
+                              }}
+                              disabled={updatingStatus === selectedIssue.id || isLocked}
+                              variant={selectedIssue.status === status ? "primary" : "secondary"}
+                              size="sm"
+                              className={`rounded-xl justify-center ${status === "Verified & Closed" ? "col-span-2" : ""}`}
+                              leftIcon={selectedIssue.status === status ? <Check className="w-3.5 h-3.5 text-white" /> : undefined}
+                              title={isLocked ? "AI verification must pass successfully to close" : ""}
+                            >
+                              <span>{isClose && isLocked ? "Closed (AI Req.)" : status}</span>
+                            </Button>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : (

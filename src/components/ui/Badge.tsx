@@ -59,12 +59,14 @@ export function getSeverityVariant(severity: string | undefined): "critical" | "
 }
 
 // Helper to resolve status to variant
-export function getStatusVariant(status: string | undefined): "brand" | "info" | "medium" | "success" | "default" {
+export function getStatusVariant(status: string | undefined): "brand" | "info" | "medium" | "success" | "default" | "critical" {
   if (!status) return "default";
   const normalized = status.toLowerCase();
   if (normalized === "submitted" || normalized === "reported") return "brand";
-  if (normalized === "verified" || normalized === "under review" || normalized === "assigned") return "info";
+  if (normalized === "assigned" || normalized === "under review") return "info";
   if (normalized === "in progress") return "medium";
-  if (normalized === "resolved" || normalized === "verified & closed") return "success";
+  if (normalized === "resolved") return "brand"; // Resolved starts verification
+  if (normalized === "ai verification" || normalized === "resolved (pending ai verification)") return "critical";
+  if (normalized === "verified & closed" || normalized === "closed") return "success";
   return "default";
 }
