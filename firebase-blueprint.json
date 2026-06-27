@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered user of the CivicSense platform",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "name", "email", "createdAt"]
+    },
+    "Issue": {
+      "title": "Issue",
+      "description": "An infrastructure hazard issue reported by a citizen",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "description": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "status": { "type": "string" },
+        "category": { "type": "string" },
+        "severity": { "type": "string" },
+        "priority": { "type": "number" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "imageUrl", "description", "latitude", "longitude", "status", "category", "severity", "priority", "createdBy", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User documents mapping to user's UID"
+    },
+    "issues/{issueId}": {
+      "schema": "Issue",
+      "description": "Infrastructure issue reports"
+    }
+  }
+}

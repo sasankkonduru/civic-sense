@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Catch-all default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isOfficial() {
+      return isSignedIn() && 
+        request.auth.token.keys().hasAll(['email']) && 
+        (request.auth.token.email.endsWith('.gov') || request.auth.token.email == 'official@civicsense.gov');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUser(user) {
+      return user.keys().hasAll(['uid', 'name', 'email', 'photoURL', 'createdAt'])
+        && user.uid is string && user.uid.size() <= 128
+        && user.name is string && user.name.size() <= 256
+        && user.email is string && user.email.size() <= 256
+        && (user.photoURL == null || (user.photoURL is string && user.photoURL.size() <= 2048))
+        && user.createdAt is string;
+    }
+
+    function isValidIssue(issue) {
+      return issue.keys().hasAll(['id', 'imageUrl', 'description', 'latitude', 'longitude', 'status', 'category', 'severity', 'priority', 'createdBy', 'createdAt'])
+        && issue.id is string && issue.id.size() <= 128
+        && issue.imageUrl is string && issue.imageUrl.size() <= 2048
+        && issue.description is string && issue.description.size() <= 10000
+        && (issue.latitude is float || issue.latitude is int)
+        && (issue.longitude is float || issue.longitude is int)
+        && issue.status is string && issue.status.size() <= 64
+        && issue.category is string && issue.category.size() <= 128
+        && issue.severity is string && issue.severity.size() <= 64
+        && (issue.priority is float || issue.priority is int)
+        && issue.createdBy is string && issue.createdBy.size() <= 256
+        && issue.createdAt is string;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /issues/{issueId} {
+      allow read, create, update, delete: if true;
+    }
+  }
+}

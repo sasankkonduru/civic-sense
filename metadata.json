@@ -1,0 +1,8 @@
+{
+  "name": "CivicSense",
+  "description": "AI-Powered Civic Intelligence Platform helping citizens report infrastructure issues and assisting governments to prioritize, verify, and resolve them efficiently.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

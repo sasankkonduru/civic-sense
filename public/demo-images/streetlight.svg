@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg-grad-street" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A237E"/>
+      <stop offset="100%" stop-color="#311B92"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFF59D" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#FFF59D" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  
+  <rect width="400" height="300" rx="16" fill="url(#bg-grad-street)"/>
+  
+  <!-- Ground reflection (dark/dim) -->
+  <ellipse cx="200" cy="260" rx="90" ry="10" fill="#121212" opacity="0.6"/>
+  
+  <!-- Lamppost structure -->
+  <g transform="translate(180, 60)">
+    <!-- Pole -->
+    <rect x="17" y="30" width="6" height="170" fill="#90A4AE"/>
+    <rect x="12" y="200" width="16" height="10" fill="#455A64"/>
+    <!-- Curved Arm -->
+    <path d="M 20 30 C 20 0, -20 -10, -30 10" stroke="#90A4AE" stroke-width="6" fill="none"/>
+    <!-- Lantern head -->
+    <path d="M -40 10 L -20 10 L -15 25 L -45 25 Z" fill="#37474F"/>
+    <!-- Light Bulb (Dark / unlit gray) -->
+    <circle cx="-30" cy="32" r="10" fill="#78909C" stroke="#37474F" stroke-width="2"/>
+    <!-- Filament inside -->
+    <path d="M -33 32 Q -30 25 -27 32" stroke="#546E7A" stroke-width="1.5" fill="none"/>
+    <!-- Broken Sparks / Warning Icon -->
+    <g transform="translate(-30, 45)">
+      <!-- Red/Yellow Warning Slash -->
+      <path d="M -15 -5 L 15 15" stroke="#FF1744" stroke-width="3" stroke-linecap="round"/>
+      <path d="M 15 -5 L -15 15" stroke="#FF1744" stroke-width="3" stroke-linecap="round"/>
+    </g>
+  </g>
+  
+  <!-- Warning sign attached to pole -->
+  <g transform="translate(205, 120)">
+    <rect x="0" y="0" width="30" height="30" rx="4" fill="#FFEB3B" stroke="#212121" stroke-width="2" transform="rotate(45 15 15)"/>
+    <text x="15" y="21" fill="#212121" font-family="system-ui, sans-serif" font-size="16" font-weight="extrabold" text-anchor="middle">!</text>
+  </g>
+
+  <!-- Title / Label -->
+  <rect x="120" y="25" width="160" height="30" rx="15" fill="#FBC02D"/>
+  <text x="200" y="44" fill="#212121" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" letter-spacing="1">STREETLIGHT OUT</text>
+</svg>
