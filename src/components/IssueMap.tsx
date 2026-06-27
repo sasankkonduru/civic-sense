@@ -296,7 +296,7 @@ export const IssueMap: React.FC<IssueMapProps> = ({
   }, [mapCenter]);
 
   return (
-    <div className="relative w-full h-full min-h-[350px] bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 shadow-inner group" id="leaflet-map-wrapper">
+    <div className="relative w-full h-full min-h-[350px] bg-slate-950 rounded-3xl overflow-hidden border border-slate-900 shadow-inner group animate-none" id="leaflet-map-wrapper">
       
       {/* Top Left Floating Indicator (City Name & Active Count) */}
       <div className="absolute top-3 left-3 z-[500] pointer-events-none flex flex-col gap-2 max-w-[280px] sm:max-w-[340px]">

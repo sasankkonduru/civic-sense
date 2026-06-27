@@ -9,6 +9,11 @@ import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db, updateFirestoreIssue, uploadBase64ToStorage, deleteFirestoreIssue } from "../firebase";
 import { Issue } from "../types";
 
+// Design System Components
+import Button from "./ui/Button";
+import Badge, { getSeverityVariant, getStatusVariant } from "./ui/Badge";
+import { Card, CardContent } from "./ui/Card";
+
 interface OfficialPageProps {
   onNavigate: (page: string) => void;
   currentUser: { email: string; name: string; role: "citizen" | "official"; picture?: string } | null;
@@ -210,7 +215,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
 
       // Auto-transition status based on verification outcome
       if (verificationResult.status === "Resolved") {
-        updatePayload.status = "Resolved (Pending AI Verification)";
+        updatePayload.status = "Resolved";
       }
 
       await updateFirestoreIssue(selectedIssue.id, updatePayload);
@@ -247,7 +252,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
     }
   };
 
-  // Delete issue handler (Cleanup convenience)
+  // Delete issue handler
   const handleDeleteIssue = async (issueId: string) => {
     if (window.confirm("Are you sure you want to delete this issue permanently?")) {
       try {
@@ -281,75 +286,89 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
   const pendingVerificationCount = issues.filter(i => i.status === "Resolved (Pending AI Verification)" || i.status === "Resolved").length;
   const closedCount = issues.filter(i => i.status === "Verified & Closed").length;
 
-  // Protect view: If not logged in as an official, show a polished mock credential wall
+  // Protect view: If not logged in as an official, show access restricted wall
   if (!currentUser || currentUser.role !== "official") {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-6 text-white selection:bg-indigo-500">
-        <div className="max-w-md w-full bg-slate-950 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center mx-auto text-indigo-400">
-            <Building2 className="w-8 h-8" />
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-xl font-extrabold tracking-tight">Access Restricted</h1>
-            <p className="text-sm text-slate-400">
-              The CivicSense Municipal Command Center is reserved for verified city department heads and repair dispatch officers.
-            </p>
-          </div>
+      <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-6 text-white selection:bg-indigo-500 relative overflow-hidden">
+        
+        {/* Glow */}
+        <div className="absolute top-1/3 left-1/3 w-[300px] h-[300px] bg-indigo-500/10 rounded-full blur-[100px] -z-10" />
 
-          <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl text-left space-y-3">
-            <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest text-center">Simulated Access Key</p>
-            <p className="text-xs text-slate-400 text-center leading-relaxed">
-              Bypass verification to audit and test the complete repair lifecycle, Gemini Vision comparing engine, and citizen updates.
-            </p>
-            <button 
-              onClick={() => {
-                const mockOfficial = {
-                  email: "official@civicsense.gov",
-                  name: "City Dispatch Director",
-                  role: "official" as const,
-                  picture: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150"
-                };
-                localStorage.setItem("civic_sense_user", JSON.stringify(mockOfficial));
-                window.location.reload();
-              }}
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/20"
+        <div className="max-w-md w-full relative z-10">
+          <Card variant="glass" glow="indigo" className="p-8 text-center space-y-6">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center mx-auto text-indigo-400">
+              <Building2 className="w-8 h-8 animate-pulse" />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-xl font-extrabold tracking-tight">Access Restricted</h1>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                The CivicSense Municipal Command Center is reserved for verified city department heads and repair dispatch officers.
+              </p>
+            </div>
+
+            <div className="bg-slate-950/60 border border-slate-900 p-5 rounded-2xl text-left space-y-3">
+              <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest text-center font-mono">Simulated Access Key</p>
+              <p className="text-[11px] text-slate-400 text-center leading-relaxed font-medium">
+                Bypass verification to audit and test the complete repair lifecycle, Gemini Vision comparing engine, and dispatcher controls.
+              </p>
+              <Button 
+                onClick={() => {
+                  const mockOfficial = {
+                    email: "official@civicsense.gov",
+                    name: "City Dispatch Director",
+                    role: "official" as const,
+                    picture: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150"
+                  };
+                  localStorage.setItem("civic_sense_user", JSON.stringify(mockOfficial));
+                  window.location.reload();
+                }}
+                variant="primary"
+                className="w-full text-xs font-bold py-2.5 rounded-xl"
+              >
+                Authorize as City Official
+              </Button>
+            </div>
+
+            <Button 
+              onClick={() => onNavigate("dashboard")}
+              variant="ghost"
+              size="sm"
+              leftIcon={<ArrowLeft className="w-3.5 h-3.5" />}
+              className="mx-auto"
             >
-              Authorize as City Official
-            </button>
-          </div>
-
-          <button 
-            onClick={() => onNavigate("dashboard")}
-            className="text-xs font-bold text-slate-400 hover:text-white flex items-center justify-center gap-1.5 mx-auto transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Return to Public Dashboard</span>
-          </button>
+              Return to Public Dashboard
+            </Button>
+          </Card>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white relative overflow-hidden">
+      
+      {/* Decorative glows */}
+      <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-indigo-500/5 rounded-full blur-[100px] -z-10 pointer-events-none" />
+
       {/* Official Header */}
-      <header className="sticky top-0 z-30 bg-slate-950/95 border-b border-slate-900 backdrop-blur-md px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <header className="sticky top-0 z-30 bg-slate-950/80 border-b border-slate-900 backdrop-blur-xl px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
-          <button 
+          <Button 
             onClick={() => onNavigate("dashboard")}
-            className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors"
+            variant="outline"
+            size="sm"
+            className="p-2 h-9 w-9 bg-slate-900 border border-slate-850"
             title="Back to Dashboard"
             id="back-to-dashboard-btn"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
+            leftIcon={<ArrowLeft className="w-4 h-4" />}
+          />
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-bold text-indigo-400 uppercase tracking-widest">
+              <span className="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-[9px] font-extrabold text-indigo-400 uppercase tracking-widest font-mono">
                 Admin Center
               </span>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Secure Grid</span>
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider font-mono">Secure Grid</span>
             </div>
             <h1 className="text-lg font-black tracking-tight mt-1 flex items-center gap-1.5">
               <Building className="w-5 h-5 text-indigo-400" />
@@ -362,7 +381,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
         <div className="flex items-center gap-3 self-end md:self-auto">
           <div className="text-right hidden sm:block">
             <p className="text-xs font-bold text-slate-200">{currentUser.name}</p>
-            <p className="text-[10px] text-indigo-400 font-semibold mt-0.5">{currentUser.email}</p>
+            <p className="text-[10px] text-indigo-400 font-semibold font-mono mt-0.5">{currentUser.email}</p>
           </div>
           {currentUser.picture && (
             <img 
@@ -372,44 +391,49 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
               referrerPolicy="no-referrer"
             />
           )}
-          <button 
+          <Button 
             onClick={onLogout}
-            className="p-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-400 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+            variant="danger"
+            size="sm"
+            className="text-xs font-bold rounded-xl"
             title="Sign Out"
             id="official-logout-btn"
+            leftIcon={<LogOut className="w-3.5 h-3.5" />}
           >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Logout</span>
-          </button>
+            Logout
+          </Button>
         </div>
       </header>
 
       {/* Operations Dashboard Metrics */}
-      <section className="p-6 grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <section className="p-6 grid grid-cols-2 lg:grid-cols-5 gap-4 relative z-10">
         {[
-          { label: "Active Pipeline", count: totalInTriage, color: "border-slate-800 text-indigo-400", sub: "unresolved backlog" },
-          { label: "Backlog / Reported", count: reportedCount, color: "border-slate-800 text-sky-400", sub: "triage assessment" },
-          { label: "In Active Repair", count: inProgressCount, color: "border-slate-800 text-amber-400", sub: "department active" },
-          { label: "AI Verification", count: pendingVerificationCount, color: "border-slate-800 text-purple-400", sub: "comparative audit" },
-          { label: "Verified & Closed", count: closedCount, color: "border-slate-800 text-emerald-400", sub: "completed archive" },
+          { label: "Active Pipeline", count: totalInTriage, color: "text-indigo-400", sub: "unresolved backlog" },
+          { label: "Backlog / Reported", count: reportedCount, color: "text-sky-400", sub: "triage assessment" },
+          { label: "In Active Repair", count: inProgressCount, color: "text-amber-400", sub: "department active" },
+          { label: "AI Verification", count: pendingVerificationCount, color: "text-purple-400", sub: "comparative audit" },
+          { label: "Verified & Closed", count: closedCount, color: "text-emerald-400", sub: "completed archive" },
         ].map((kpi, idx) => (
-          <div key={idx} className="bg-slate-900/40 border border-slate-900 rounded-2xl p-4 flex flex-col justify-between space-y-3">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">{kpi.label}</span>
-            <div className="flex items-baseline space-x-1">
-              <span className={`text-2xl font-black ${kpi.color}`}>{kpi.count}</span>
-              <span className="text-xs text-slate-600 font-semibold">issues</span>
-            </div>
-            <p className="text-[9px] text-slate-400 leading-none font-medium uppercase tracking-wider">{kpi.sub}</p>
+          <div key={idx}>
+            <Card variant="interactive" className="p-4 flex flex-col justify-between space-y-3 bg-slate-900/10 border-slate-900 h-full">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block font-mono">{kpi.label}</span>
+              <div className="flex items-baseline space-x-1">
+                <span className={`text-2xl font-black ${kpi.color}`}>{kpi.count}</span>
+                <span className="text-xs text-slate-600 font-semibold">issues</span>
+              </div>
+              <p className="text-[9px] text-slate-400 leading-none font-bold uppercase tracking-wider font-mono">{kpi.sub}</p>
+            </Card>
           </div>
         ))}
       </section>
 
       {/* Main Command Split Pane */}
-      <main className="px-6 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-190px)] min-h-[500px]">
+      <main className="px-6 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-190px)] min-h-[500px] relative z-10">
+        
         {/* Left Side: Filter and Issue Lists (5cols) */}
         <div className="lg:col-span-5 flex flex-col space-y-4 h-full overflow-hidden">
           {/* Controls Bar */}
-          <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4 space-y-3 shrink-0">
+          <div className="bg-slate-900/40 border border-slate-900 rounded-3xl p-4 space-y-3 shrink-0">
             {/* Search Input */}
             <div className="relative">
               <input 
@@ -417,7 +441,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                 placeholder="Search triage ticket id, landmark or category..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-colors"
+                className="w-full glass-input px-4 py-2.5 rounded-xl text-xs"
                 id="official-search-input"
               />
             </div>
@@ -425,7 +449,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
             {/* Quick Filters Grid */}
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Status</label>
+                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1 font-mono">Status</label>
                 <select 
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
@@ -443,7 +467,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
               </div>
 
               <div>
-                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Severity</label>
+                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1 font-mono">Severity</label>
                 <select 
                   value={filterSeverity}
                   onChange={(e) => setFilterSeverity(e.target.value)}
@@ -459,7 +483,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
               </div>
 
               <div>
-                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Department</label>
+                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1 font-mono">Department</label>
                 <select 
                   value={filterDepartment}
                   onChange={(e) => setFilterDepartment(e.target.value)}
@@ -475,7 +499,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
           </div>
 
           {/* Active List Panel */}
-          <div className="flex-1 bg-slate-900/30 border border-slate-900 rounded-3xl overflow-y-auto p-4 space-y-3 custom-scrollbar">
+          <div className="flex-1 bg-slate-900/10 border border-slate-900 rounded-3xl overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {loadingIssues ? (
               <div className="h-full flex flex-col justify-center items-center py-12 space-y-3">
                 <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
@@ -483,9 +507,9 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
               </div>
             ) : filteredIssues.length === 0 ? (
               <div className="h-full flex flex-col justify-center items-center py-12 text-center space-y-2">
-                <AlertTriangle className="w-8 h-8 text-slate-600" />
-                <p className="text-xs text-slate-400 font-bold">No issues found matching search constraints.</p>
-                <p className="text-[10px] text-slate-500 max-w-xs mx-auto">Verify that you have created issues or clear filter parameters to view the complete active queue.</p>
+                <AlertTriangle className="w-8 h-8 text-slate-600 animate-pulse" />
+                <p className="text-xs text-slate-400 font-bold">No issues found matching constraints.</p>
+                <p className="text-[10px] text-slate-500 max-w-xs mx-auto font-medium">Verify credentials or clear filters to view active queue.</p>
               </div>
             ) : (
               filteredIssues.map((issue) => {
@@ -495,40 +519,24 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                     key={issue.id}
                     id={`triage-ticket-${issue.id}`}
                     onClick={() => setSelectedIssue(issue)}
-                    className={`w-full text-left p-4 rounded-2xl border transition-all flex flex-col space-y-3 ${
+                    className={`w-full text-left p-4 rounded-2xl border transition-all flex flex-col space-y-3 cursor-pointer ${
                       isSelected 
-                        ? "bg-slate-900 border-indigo-500/60 shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-500/20" 
-                        : "bg-slate-900/50 border-slate-900 hover:bg-slate-900/80 hover:border-slate-800"
+                        ? "bg-indigo-950/20 border-indigo-500/50 shadow-lg" 
+                        : "bg-slate-900/30 border-slate-900 hover:bg-slate-900/60 hover:border-slate-800"
                     }`}
                   >
                     {/* Severity and Status Tag Line */}
                     <div className="flex items-center justify-between w-full">
                       <div className="flex items-center space-x-1.5">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
-                          issue.severity === "Critical" 
-                            ? "bg-red-500/10 text-red-400 border border-red-500/20" 
-                            : issue.severity === "High" 
-                            ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                            : issue.severity === "Medium"
-                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                            : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        }`}>
+                        <Badge variant={getSeverityVariant(issue.severity)}>
                           {issue.severity}
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-500">ID: {issue.id.slice(0, 8)}</span>
+                        </Badge>
+                        <span className="text-[10px] font-bold text-slate-500 font-mono">ID: {issue.id.slice(0, 8)}</span>
                       </div>
                       
-                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide flex items-center gap-1 ${
-                        issue.status === "Verified & Closed"
-                          ? "bg-emerald-500/15 text-emerald-400"
-                          : issue.status === "Resolved (Pending AI Verification)" || issue.status === "Resolved"
-                          ? "bg-purple-500/15 text-purple-400"
-                          : issue.status === "In Progress"
-                          ? "bg-amber-500/15 text-amber-400"
-                          : "bg-sky-500/15 text-sky-400"
-                      }`}>
+                      <Badge variant={getStatusVariant(issue.status)}>
                         {issue.status}
-                      </span>
+                      </Badge>
                     </div>
 
                     {/* Title and location */}
@@ -537,20 +545,20 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                         {issue.title}
                       </h4>
                       <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
+                        <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                         <span className="truncate">{issue.location}</span>
                       </p>
                     </div>
 
                     {/* Department and date footers */}
-                    <div className="pt-2.5 border-t border-slate-900 flex justify-between items-center text-[10px] text-slate-500">
+                    <div className="pt-2.5 border-t border-slate-900/80 flex justify-between items-center text-[10px] text-slate-500">
                       <span className="flex items-center gap-1 font-bold text-slate-400">
-                        <Building className="w-3 h-3 text-slate-500" />
+                        <Building className="w-3.5 h-3.5 text-slate-500" />
                         <span className="truncate max-w-[150px]">
                           {issue.department || "Unassigned Dept"}
                         </span>
                       </span>
-                      <span>
+                      <span className="font-mono">
                         {new Date(issue.createdAt).toLocaleDateString(undefined, {
                           month: "short",
                           day: "numeric"
@@ -565,7 +573,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
         </div>
 
         {/* Right Side: Selected Issue Detail & Operational Actions (7cols) */}
-        <div className="lg:col-span-7 h-full overflow-y-auto bg-slate-900/20 border border-slate-900 rounded-3xl p-6 flex flex-col space-y-6">
+        <div className="lg:col-span-7 h-full overflow-y-auto bg-slate-900/10 border border-slate-900 rounded-3xl p-6 flex flex-col space-y-6 custom-scrollbar">
           <AnimatePresence mode="wait">
             {!selectedIssue ? (
               <div className="flex-1 flex flex-col justify-center items-center py-24 text-center space-y-4">
@@ -574,7 +582,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-bold text-slate-400">No Dispatch Ticket Selected</p>
-                  <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  <p className="text-xs text-slate-500 max-w-xs mx-auto font-medium">
                     Click any active ticket in the queue on the left to assign departments, update repair statuses, and verify resolutions.
                   </p>
                 </div>
@@ -591,46 +599,31 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-slate-900 pb-5">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
-                        selectedIssue.severity === "Critical" 
-                          ? "bg-red-500/10 text-red-400 border border-red-500/20" 
-                          : selectedIssue.severity === "High" 
-                          ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                          : selectedIssue.severity === "Medium"
-                          ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                          : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                      }`}>
+                      <Badge variant={getSeverityVariant(selectedIssue.severity)}>
                         {selectedIssue.severity} Severity
-                      </span>
-                      <span className="text-[10px] font-extrabold text-indigo-400">{selectedIssue.category}</span>
+                      </Badge>
+                      <Badge variant="brand">{selectedIssue.category}</Badge>
                     </div>
                     <h2 className="text-base font-black text-white">{selectedIssue.title}</h2>
-                    <p className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5 pt-1">
-                      <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                    <p className="text-[10px] text-slate-450 font-bold flex items-center gap-1.5 pt-1">
+                      <MapPin className="w-3.5 h-3.5 text-indigo-400" />
                       <span>{selectedIssue.location}</span>
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2 self-start">
-                    <button
+                    <Button
                       onClick={() => handleDeleteIssue(selectedIssue.id)}
-                      className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-500 hover:text-red-400 transition-colors"
+                      variant="ghost"
+                      className="p-2 h-9 w-9 bg-slate-900 border border-slate-850 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
                       title="Delete Ticket"
                       id="official-delete-ticket-btn"
                     >
                       <Trash2 className="w-4 h-4" />
-                    </button>
-                    <span className={`px-3 py-1.5 rounded-2xl text-xs font-black uppercase tracking-widest ${
-                      selectedIssue.status === "Verified & Closed"
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        : selectedIssue.status === "Resolved (Pending AI Verification)" || selectedIssue.status === "Resolved"
-                        ? "bg-purple-500/10 text-purple-400 border border-purple-500/20 animate-pulse"
-                        : selectedIssue.status === "In Progress"
-                        ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                        : "bg-sky-500/10 text-sky-400 border border-sky-500/20"
-                    }`}>
+                    </Button>
+                    <Badge variant={getStatusVariant(selectedIssue.status)}>
                       {selectedIssue.status}
-                    </span>
+                    </Badge>
                   </div>
                 </div>
 
@@ -639,20 +632,20 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                   {/* Left Column: Details */}
                   <div className="space-y-4">
                     <div className="space-y-1.5">
-                      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Reporter Info</h4>
+                      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">Reporter Info</h4>
                       <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-3 flex items-center space-x-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 text-xs font-black uppercase">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-455 text-xs font-black uppercase border border-indigo-500/20">
                           {selectedIssue.reporterName[0] || "U"}
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-slate-200 truncate">{selectedIssue.reporterName}</p>
-                          <p className="text-[10px] text-slate-400 truncate font-semibold">{selectedIssue.reporterEmail}</p>
+                          <p className="text-[10px] text-slate-500 truncate font-semibold font-mono">{selectedIssue.reporterEmail}</p>
                         </div>
                       </div>
                     </div>
 
                     <div className="space-y-1.5">
-                      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Description</h4>
+                      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">Description</h4>
                       <p className="text-xs text-slate-300 leading-relaxed font-semibold bg-slate-900/30 border border-slate-900 rounded-2xl p-4">
                         {selectedIssue.description || "No description was entered for this dispatch ticket."}
                       </p>
@@ -660,14 +653,14 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
 
                     <div className="grid grid-cols-2 gap-3 pt-1">
                       <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-3 text-center">
-                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block">Priority Index</span>
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest font-mono block">Priority Index</span>
                         <span className="text-sm font-black text-indigo-400 mt-1 block">
                           {selectedIssue.priorityScore !== undefined ? `${selectedIssue.priorityScore}/100` : `Lvl ${selectedIssue.priority}`}
                         </span>
                       </div>
                       <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-3 text-center">
-                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block">Report Date</span>
-                        <span className="text-xs font-bold text-slate-300 mt-1.5 block">
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest font-mono block">Report Date</span>
+                        <span className="text-xs font-bold text-slate-300 mt-1.5 block font-mono">
                           {new Date(selectedIssue.createdAt).toLocaleDateString()}
                         </span>
                       </div>
@@ -676,7 +669,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
 
                   {/* Right Column: Original Image */}
                   <div className="space-y-2">
-                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Original Hazard Photo</h4>
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">Original Hazard Photo</h4>
                     <div className="relative rounded-2xl overflow-hidden border border-slate-800 aspect-video bg-slate-900 flex items-center justify-center">
                       {selectedIssue.imageUrl ? (
                         <img 
@@ -686,9 +679,9 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="text-slate-600 flex flex-col items-center justify-center space-y-2">
+                        <div className="text-slate-650 flex flex-col items-center justify-center space-y-2">
                           <ImageIcon className="w-10 h-10 text-slate-700" />
-                          <p className="text-[10px] font-bold uppercase text-slate-500">No Image Attached</p>
+                          <p className="text-[10px] font-bold uppercase text-slate-500 font-mono">No Image Attached</p>
                         </div>
                       )}
                     </div>
@@ -699,7 +692,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                 <div className="space-y-2 pt-4 border-t border-slate-900">
                   <div className="flex items-center space-x-1.5">
                     <Building className="w-4 h-4 text-indigo-400" />
-                    <h3 className="text-xs font-black text-slate-300 uppercase tracking-wider">Assign Municipal Department</h3>
+                    <h3 className="text-xs font-black text-slate-300 uppercase tracking-wider font-mono">Assign Department</h3>
                   </div>
 
                   <div className="relative w-full max-w-md">
@@ -727,32 +720,30 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                 {/* ACTION 2: Change Triage Status */}
                 <div className="space-y-3 pt-4 border-t border-slate-900">
                   <div className="flex items-center space-x-1.5">
-                    <Clock className="w-4 h-4 text-amber-400" />
-                    <h3 className="text-xs font-black text-slate-300 uppercase tracking-wider">Update Lifecycle Status</h3>
+                    <Clock className="w-4 h-4 text-amber-405" />
+                    <h3 className="text-xs font-black text-slate-300 uppercase tracking-wider font-mono">Update Lifecycle Status</h3>
                   </div>
 
-                  <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
-                    Transition this hazard claim manually across core operations stages:
+                  <p className="text-[10px] text-slate-550 font-bold leading-relaxed uppercase font-mono">
+                    Transition manually across core operations stages:
                   </p>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {["Reported", "Under Review", "Assigned", "In Progress", "Resolved (Pending AI Verification)", "Verified & Closed"].map((st) => {
+                    {["Reported", "Under Review", "Assigned", "In Progress", "Resolved", "Verified & Closed"].map((st) => {
                       const isActive = selectedIssue.status === st;
                       return (
-                        <button
+                        <Button
                           key={st}
                           id={`official-status-${st.replace(/\s+/g, "-")}`}
                           onClick={() => handleUpdateStatus(selectedIssue.id, st)}
                           disabled={updatingStatus === selectedIssue.id}
-                          className={`py-2 px-3 border rounded-xl text-[10px] font-black uppercase tracking-wide flex items-center justify-center gap-1.5 transition-all ${
-                            isActive
-                              ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/10"
-                              : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800"
-                          }`}
+                          variant={isActive ? "primary" : "secondary"}
+                          size="sm"
+                          className="rounded-xl justify-center"
+                          leftIcon={isActive ? <Check className="w-3 h-3 text-white" /> : undefined}
                         >
-                          {isActive && <Check className="w-3 h-3 text-white" />}
-                          <span>{st === "Resolved (Pending AI Verification)" ? "Pending AI Audit" : st}</span>
-                        </button>
+                          <span>{st}</span>
+                        </Button>
                       );
                     })}
                   </div>
@@ -762,12 +753,12 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                 <div className="space-y-4 pt-4 border-t border-slate-900">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-1.5">
-                      <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-                      <h3 className="text-xs font-black text-slate-300 uppercase tracking-wider">AI Resolution Audit</h3>
+                      <Sparkles className="w-4 h-4 text-purple-450 animate-pulse" />
+                      <h3 className="text-xs font-black text-slate-300 uppercase tracking-wider font-mono">AI Resolution Audit</h3>
                     </div>
                     {selectedIssue.resolutionVerification && (
-                      <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold text-emerald-405 flex items-center gap-1 font-mono">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                         Audited
                       </span>
                     )}
@@ -778,21 +769,15 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                     <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-900 pb-3">
                         <div className="flex items-center space-x-2">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                            selectedIssue.resolutionVerification.status === "Resolved"
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                              : selectedIssue.resolutionVerification.status === "Partially Resolved"
-                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                              : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                          }`}>
+                          <Badge variant={selectedIssue.resolutionVerification.status === "Resolved" ? "success" : "medium"}>
                             {selectedIssue.resolutionVerification.status}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-semibold">
+                          </Badge>
+                          <span className="text-[10px] text-slate-400 font-semibold font-mono">
                             Confidence Match: <b className="text-slate-200">{selectedIssue.resolutionVerification.confidenceScore}%</b>
                           </span>
                         </div>
 
-                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">
                           Audited on {new Date(selectedIssue.resolutionVerification.verifiedAt).toLocaleDateString()}
                         </span>
                       </div>
@@ -816,7 +801,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                       {selectedIssue.resolutionImage && (
                         <div className="grid grid-cols-2 gap-4 pt-2">
                           <div className="space-y-1.5">
-                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Original Issue</span>
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest font-mono">Original Issue</span>
                             <div className="aspect-video rounded-xl overflow-hidden border border-slate-900 bg-slate-950">
                               <img src={selectedIssue.imageUrl} alt="Before" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             </div>
@@ -832,14 +817,15 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
 
                       {/* Quick close button if Resolved and status is not yet Closed */}
                       {selectedIssue.status !== "Verified & Closed" && selectedIssue.resolutionVerification.status === "Resolved" && (
-                        <button
+                        <Button
                           onClick={() => handleCloseIssue(selectedIssue.id)}
-                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-emerald-600/15 flex items-center justify-center gap-2"
+                          variant="success"
+                          className="w-full py-2.5 text-xs font-black uppercase tracking-wider"
                           id="audit-verify-close-btn"
+                          leftIcon={<CheckCircle2 className="w-4 h-4" />}
                         >
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Close and Archive Ticket</span>
-                        </button>
+                          Close and Archive Ticket
+                        </Button>
                       )}
 
                       {/* Allow re-verifying */}
@@ -856,7 +842,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                               resolutionImage: undefined
                             } : null);
                           }}
-                          className="text-[10px] font-black text-indigo-400 hover:text-indigo-300 hover:underline uppercase tracking-wider"
+                          className="text-[10px] font-black text-indigo-455 hover:text-indigo-400 hover:underline uppercase tracking-wider font-mono cursor-pointer"
                           id="reverify-trigger"
                         >
                           Re-Upload & Audit
@@ -864,8 +850,8 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-5 space-y-4">
-                      <p className="text-xs text-slate-400 leading-relaxed font-medium">
+                    <div className="bg-slate-900/35 border border-slate-900 rounded-2xl p-5 space-y-4">
+                      <p className="text-xs text-slate-455 leading-relaxed font-medium">
                         Compare repair efficacy by uploading the field crew's completion photo. Gemini Vision will analyze and match pixel differences to verify resolution.
                       </p>
 
@@ -883,7 +869,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                                 setRepairFile(null);
                                 setRepairBase64("");
                               }}
-                              className="absolute top-2.5 right-2.5 bg-slate-950 hover:bg-slate-900 text-white p-1 rounded-full text-xs w-6 h-6 flex items-center justify-center border border-slate-800 transition-colors"
+                              className="absolute top-2.5 right-2.5 bg-slate-950 hover:bg-slate-900 text-white p-1 rounded-full text-xs w-6 h-6 flex items-center justify-center border border-slate-800 transition-colors cursor-pointer"
                             >
                               ✕
                             </button>
@@ -892,11 +878,11 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                           {/* Upload Progress Indicator */}
                           {isUploading && (
                             <div className="space-y-1.5 max-w-sm mx-auto">
-                              <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                              <div className="flex justify-between text-[10px] font-bold text-slate-400 font-mono">
                                 <span>Uploading verification proof...</span>
                                 <span>{uploadProgress}%</span>
                               </div>
-                              <div className="w-full bg-slate-950 rounded-full h-1 overflow-hidden">
+                              <div className="w-full bg-slate-955 rounded-full h-1 overflow-hidden">
                                 <div className="bg-indigo-500 h-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
                               </div>
                             </div>
@@ -906,24 +892,15 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                             <p className="text-xs text-red-400 font-bold text-center">{verificationError}</p>
                           )}
 
-                          <button
+                          <Button
                             onClick={handleRunVerification}
-                            disabled={verifyingResolution}
-                            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400/40 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                            loading={verifyingResolution}
+                            variant="primary"
+                            className="w-full py-2.5 text-xs font-black uppercase tracking-wider"
                             id="run-ai-audit-btn"
                           >
-                            {verifyingResolution ? (
-                              <>
-                                <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
-                                <span>Running Gemini Comparison Engine ({uploadProgress}%)</span>
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="w-4 h-4" />
-                                <span>Verify Repair with Gemini Vision</span>
-                              </>
-                            )}
-                          </button>
+                            Verify Repair with Gemini Vision
+                          </Button>
                         </div>
                       ) : (
                         <div 
@@ -934,7 +911,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                           <div className="text-xs text-slate-300 font-semibold">
                             <span className="font-extrabold text-indigo-400 group-hover:underline">Click to upload completion photo</span> or drag and drop
                           </div>
-                          <p className="text-[10px] text-slate-500 font-medium">PNG, JPG, WEBP up to 10MB</p>
+                          <p className="text-[10px] text-slate-500 font-medium font-mono">PNG, JPG, WEBP up to 10MB</p>
                           <input 
                             type="file" 
                             ref={repairFileInputRef}
