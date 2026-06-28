@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Issue } from "../types";
-import { uploadBase64ToStorage, createFirestoreIssue } from "../firebase";
+import { uploadBase64ToStorage, createFirestoreIssue, isStorageConfigured, compressBase64Image } from "../firebase";
 
 // Design System Components
 import Button from "./ui/Button";
@@ -56,6 +56,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageMetadata, setImageMetadata] = useState<{ name: string; size: string; type: string } | null>(null);
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [localImageFallbackUsed, setLocalImageFallbackUsed] = useState(() => !isStorageConfigured());
   
   const [isDragging, setIsDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -374,8 +375,20 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
         setUploadProgress(15);
         const storagePath = `issues/${Date.now()}_reported_defect.jpg`;
         setUploadProgress(50);
-        resolvedImageUrl = await uploadBase64ToStorage(imageBase64, storagePath);
-        setUploadProgress(100);
+        try {
+          if (!isStorageConfigured()) {
+            throw new Error("Firebase Storage is not configured.");
+          }
+          resolvedImageUrl = await uploadBase64ToStorage(imageBase64, storagePath);
+          setUploadProgress(100);
+        } catch (err) {
+          console.warn("Storage upload failed or unconfigured, falling back to local compressed base64:", err);
+          setLocalImageFallbackUsed(true);
+          setUploadProgress(80);
+          const compressed = await compressBase64Image(imageBase64);
+          resolvedImageUrl = compressed;
+          setUploadProgress(100);
+        }
       }
 
       if (!duplicateCheckResult && !showDuplicateWarning) {
@@ -502,56 +515,74 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
         
         {/* Step Progress Indicator (Wizard Progress Bar at top) */}
         {!successIssue && !showDuplicateWarning && (
-          <div className="w-full bg-slate-900/30 border border-slate-900 rounded-3xl p-5 mb-2">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-500 font-mono select-none">
-              
-              <div 
-                onClick={() => currentStep > 0 && setCurrentStep(0)}
-                className={`flex items-center space-x-2 cursor-pointer transition-colors ${currentStep >= 0 ? "text-indigo-400" : ""}`}
-              >
-                <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] border ${
-                  currentStep === 0 ? "bg-indigo-500/10 border-indigo-500 text-indigo-400" :
-                  currentStep > 0 ? "bg-emerald-500/10 border-emerald-500 text-emerald-400" :
-                  "border-slate-800 text-slate-500"
-                }`}>
-                  {currentStep > 0 ? <Check className="w-3.5 h-3.5" /> : "1"}
+          <>
+            <div className="w-full bg-slate-900/30 border border-slate-900 rounded-3xl p-5 mb-2">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 font-mono select-none">
+                
+                <div 
+                  onClick={() => currentStep > 0 && setCurrentStep(0)}
+                  className={`flex items-center space-x-2 cursor-pointer transition-colors ${currentStep >= 0 ? "text-indigo-400" : ""}`}
+                >
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] border ${
+                    currentStep === 0 ? "bg-indigo-500/10 border-indigo-500 text-indigo-400" :
+                    currentStep > 0 ? "bg-emerald-500/10 border-emerald-500 text-emerald-400" :
+                    "border-slate-800 text-slate-500"
+                  }`}>
+                    {currentStep > 0 ? <Check className="w-3.5 h-3.5" /> : "1"}
+                  </div>
+                  <span>Visual Evidence</span>
                 </div>
-                <span>Visual Evidence</span>
-              </div>
 
-              <div className={`flex-1 h-[2px] mx-4 transition-colors duration-300 ${currentStep >= 1 ? "bg-indigo-500/30" : "bg-slate-900"}`} />
+                <div className={`flex-1 h-[2px] mx-4 transition-colors duration-300 ${currentStep >= 1 ? "bg-indigo-500/30" : "bg-slate-900"}`} />
 
-              <div 
-                onClick={() => currentStep > 1 && setCurrentStep(1)}
-                className={`flex items-center space-x-2 cursor-pointer transition-colors ${currentStep >= 1 ? "text-indigo-400" : ""}`}
-              >
-                <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] border ${
-                  currentStep === 1 ? "bg-indigo-500/10 border-indigo-500 text-indigo-400" :
-                  currentStep > 1 ? "bg-emerald-500/10 border-emerald-500 text-emerald-400" :
-                  "border-slate-800 text-slate-500"
-                }`}>
-                  {currentStep > 1 ? <Check className="w-3.5 h-3.5" /> : "2"}
+                <div 
+                  onClick={() => currentStep > 1 && setCurrentStep(1)}
+                  className={`flex items-center space-x-2 cursor-pointer transition-colors ${currentStep >= 1 ? "text-indigo-400" : ""}`}
+                >
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] border ${
+                    currentStep === 1 ? "bg-indigo-500/10 border-indigo-500 text-indigo-400" :
+                    currentStep > 1 ? "bg-emerald-500/10 border-emerald-500 text-emerald-400" :
+                    "border-slate-800 text-slate-500"
+                  }`}>
+                    {currentStep > 1 ? <Check className="w-3.5 h-3.5" /> : "2"}
+                  </div>
+                  <span>Details</span>
                 </div>
-                <span>Details</span>
-              </div>
 
-              <div className={`flex-1 h-[2px] mx-4 transition-colors duration-300 ${currentStep >= 2 ? "bg-indigo-500/30" : "bg-slate-900"}`} />
+                <div className={`flex-1 h-[2px] mx-4 transition-colors duration-300 ${currentStep >= 2 ? "bg-indigo-500/30" : "bg-slate-900"}`} />
 
-              <div 
-                onClick={() => currentStep > 2 && setCurrentStep(2)}
-                className={`flex items-center space-x-2 cursor-pointer transition-colors ${currentStep >= 2 ? "text-indigo-400" : ""}`}
-              >
-                <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] border ${
-                  currentStep === 2 ? "bg-indigo-500/10 border-indigo-500 text-indigo-400" :
-                  "border-slate-800 text-slate-500"
-                }`}>
-                  3
+                <div 
+                  onClick={() => currentStep > 2 && setCurrentStep(2)}
+                  className={`flex items-center space-x-2 cursor-pointer transition-colors ${currentStep >= 2 ? "text-indigo-400" : ""}`}
+                >
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] border ${
+                    currentStep === 2 ? "bg-indigo-500/10 border-indigo-500 text-indigo-400" :
+                    "border-slate-800 text-slate-500"
+                  }`}>
+                    3
+                  </div>
+                  <span>Triage</span>
                 </div>
-                <span>Triage</span>
-              </div>
 
+              </div>
             </div>
-          </div>
+
+            {localImageFallbackUsed && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-3xl flex items-start space-x-3 text-xs mb-4"
+              >
+                <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+                <div>
+                  <p className="font-extrabold text-white">Local Image Handling Active</p>
+                  <p className="text-slate-400 mt-0.5 leading-relaxed">
+                    Firebase Storage is not configured or unavailable. The application automatically optimized and saved the photograph directly within your report payload.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </>
         )}
 
         <AnimatePresence mode="wait">

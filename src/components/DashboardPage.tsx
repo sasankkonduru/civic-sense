@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
-import { db, updateFirestoreIssue, uploadBase64ToStorage, seedDemoIssuesIfEmpty } from "../firebase";
+import { db, updateFirestoreIssue, uploadBase64ToStorage, seedDemoIssuesIfEmpty, isStorageConfigured, compressBase64Image } from "../firebase";
 import { Issue, AIInsight, DashboardStats, MunicipalInsights, MunicipalDailyBrief } from "../types";
 import { IssueMap } from "./IssueMap";
 const STAGES = [
@@ -157,6 +157,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
   const [verifyingResolution, setVerifyingResolution] = useState(false);
   const [resolutionError, setResolutionError] = useState("");
   const resolutionFileInputRef = useRef<HTMLInputElement>(null);
+  const [localImageFallbackUsed, setLocalImageFallbackUsed] = useState(() => !isStorageConfigured());
 
   // Clear verification state on selection change
   useEffect(() => {
@@ -210,7 +211,17 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
 
       const verificationResult = await response.json();
       const storagePath = `resolutions/${selectedIssue.id}_${Date.now()}.jpg`;
-      const uploadedUrl = await uploadBase64ToStorage(resolutionBase64, storagePath);
+      let uploadedUrl = "";
+      try {
+        if (!isStorageConfigured()) {
+          throw new Error("Firebase Storage is not configured.");
+        }
+        uploadedUrl = await uploadBase64ToStorage(resolutionBase64, storagePath);
+      } catch (err) {
+        console.warn("Storage upload failed or unconfigured, falling back to local compressed base64:", err);
+        setLocalImageFallbackUsed(true);
+        uploadedUrl = await compressBase64Image(resolutionBase64);
+      }
 
       const updatePayload: Partial<Issue> = {
         resolutionImage: uploadedUrl,
@@ -749,6 +760,20 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
           </div>
         </div>
       </header>
+
+      {localImageFallbackUsed && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+          <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-2xl flex items-start space-x-3 text-xs animate-fade-in">
+            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+            <div>
+              <p className="font-extrabold text-white">Local Image Handling Active (Dashboard)</p>
+              <p className="text-slate-400 mt-0.5 leading-relaxed">
+                Firebase Storage is not configured or unavailable. Resolution proof uploads will be optimized and saved locally using base64.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Grid Desk */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 relative z-10">

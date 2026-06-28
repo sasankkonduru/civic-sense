@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
-import { db, updateFirestoreIssue, uploadBase64ToStorage, deleteFirestoreIssue } from "../firebase";
+import { db, updateFirestoreIssue, uploadBase64ToStorage, deleteFirestoreIssue, isStorageConfigured, compressBase64Image } from "../firebase";
 import { Issue } from "../types";
 
 const STAGES = [
@@ -67,7 +67,9 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [verifyingResolution, setVerifyingResolution] = useState(false);
   const [verificationError, setVerificationError] = useState("");
-  const repairFileInputRef = useRef<HTMLInputElement>(null);
+  const [repairFileInputRef, setRepairFileInputRef] = useState<any>(null); // dummy/ref refactoring or just preserve
+  const repairFileInputRefActual = useRef<HTMLInputElement>(null);
+  const [localImageFallbackUsed, setLocalImageFallbackUsed] = useState(() => !isStorageConfigured());
 
   useEffect(() => {
     setRepairFile(null);
@@ -211,7 +213,17 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
       setUploadProgress(80);
 
       const storagePath = `resolutions/${selectedIssue.id}_${Date.now()}.jpg`;
-      const uploadedUrl = await uploadBase64ToStorage(repairBase64, storagePath);
+      let uploadedUrl = "";
+      try {
+        if (!isStorageConfigured()) {
+          throw new Error("Firebase Storage is not configured.");
+        }
+        uploadedUrl = await uploadBase64ToStorage(repairBase64, storagePath);
+      } catch (err) {
+        console.warn("Storage upload failed or unconfigured, falling back to local compressed base64:", err);
+        setLocalImageFallbackUsed(true);
+        uploadedUrl = await compressBase64Image(repairBase64);
+      }
       setUploadProgress(100);
 
       const updatePayload: Partial<Issue> = {
@@ -427,6 +439,18 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
           </Button>
         </div>
       </header>
+
+      {localImageFallbackUsed && (
+        <div className="mx-6 mt-4 bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-2xl flex items-start space-x-3 text-xs relative z-10 animate-fade-in">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+          <div>
+            <p className="font-extrabold text-white">Local Image Handling Active (Command Operations)</p>
+            <p className="text-slate-400 mt-0.5 leading-relaxed">
+              Firebase Storage is not configured or unavailable. Repair proof uploads will be optimized and saved locally using base64.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Metrics Section */}
       <section className="p-6 grid grid-cols-2 lg:grid-cols-5 gap-4 relative z-10">
@@ -1013,7 +1037,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                         </div>
                       ) : (
                         <div 
-                          onClick={() => repairFileInputRef.current?.click()}
+                          onClick={() => repairFileInputRefActual.current?.click()}
                           className="border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-2xl p-8 text-center cursor-pointer transition-colors bg-slate-950/40 hover:bg-slate-955 space-y-2.5 group"
                         >
                           <Upload className="w-8 h-8 text-slate-500 group-hover:text-indigo-405 mx-auto transition-colors" />
@@ -1023,7 +1047,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                           <p className="text-[10px] text-slate-500 font-medium font-mono">PNG, JPG, WEBP up to 10MB</p>
                           <input 
                             type="file" 
-                            ref={repairFileInputRef}
+                            ref={repairFileInputRefActual}
                             onChange={handleRepairFileChange}
                             accept="image/*"
                             className="hidden" 
