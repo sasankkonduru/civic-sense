@@ -10,14 +10,15 @@ import { db, updateFirestoreIssue, uploadBase64ToStorage, deleteFirestoreIssue }
 import { Issue } from "../types";
 
 const STAGES = [
-  { name: "Citizen Reported", value: "Reported" },
+  { name: "Reported", value: "Reported" },
   { name: "Assigned", value: "Assigned" },
   { name: "Under Review", value: "Under Review" },
   { name: "In Progress", value: "In Progress" },
   { name: "Resolved", value: "Resolved" },
-  { name: "AI Verification", value: "AI Verification" },
+  { name: "AI Verified", value: "AI Verification" },
   { name: "Closed", value: "Verified & Closed" }
 ];
+
 
 const getStatusStep = (status: string | undefined): number => {
   if (!status) return 0;
@@ -630,63 +631,83 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                 {/* Interactive Triage Progress Timeline */}
                 <div className="bg-slate-900/10 border border-slate-900 rounded-3xl p-5 space-y-4">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Triage Progress Timeline</span>
-                  <div className="relative border-l-2 border-slate-900/80 ml-3 pl-6 space-y-4 py-1">
-                    {STAGES.map((stage, idx) => {
-                      const currentStep = getStatusStep(selectedIssue.status);
-                      const isCompleted = idx < currentStep;
-                      const isActive = idx === currentStep;
-                      const isOfficial = currentUser?.role === "official";
-                      const canTransition = isOfficial && idx !== currentStep;
+                  <div className="relative w-full overflow-x-auto no-scrollbar py-4 px-2 bg-slate-950/45 rounded-2xl border border-slate-900/80">
+                    <div className="flex items-center justify-between min-w-[640px] relative px-4">
+                      {/* Connector Line Background */}
+                      <div className="absolute top-[18px] left-8 right-8 h-0.5 bg-slate-800/80 z-0" />
                       
-                      const isCloseStage = stage.value === "Verified & Closed";
-                      const verificationSuccess = selectedIssue.resolutionVerification?.status === "Resolved";
-                      const isDisabledClose = isCloseStage && !verificationSuccess;
+                      {/* Active Progress Connector Line */}
+                      <div 
+                        className="absolute top-[18px] left-8 h-0.5 bg-indigo-500 transition-all duration-300 z-0"
+                        style={{ 
+                          width: `calc(${((getStatusStep(selectedIssue.status)) / (STAGES.length - 1)) * 100}% - ${getStatusStep(selectedIssue.status) === 0 ? 0 : 32}px)`
+                        }}
+                      />
 
-                      return (
-                        <div 
-                          key={idx} 
-                          onClick={() => {
-                            if (canTransition && !isDisabledClose) {
-                              handleUpdateStatus(selectedIssue.id, stage.value);
-                            }
-                          }}
-                          className={`relative flex flex-col items-start text-xs transition-all ${
-                            canTransition && !isDisabledClose ? "cursor-pointer hover:translate-x-1" : "cursor-default"
-                          }`}
-                          title={isDisabledClose ? "Successful AI verification is required to Close this ticket." : ""}
-                        >
-                          {/* Dot indicator */}
-                          <div className={`absolute left-[-31px] top-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-all ${
-                            isCompleted ? "bg-emerald-500 border-emerald-400 text-white" :
-                            isActive ? "bg-indigo-500 border-indigo-400 text-white animate-pulse" :
-                            "bg-slate-950 border-slate-800"
-                          }`}>
-                            {isCompleted && <Check className="w-2 h-2" />}
-                          </div>
+                      {STAGES.map((stage, idx) => {
+                        const currentStep = getStatusStep(selectedIssue.status);
+                        const isCompleted = idx < currentStep;
+                        const isActive = idx === currentStep;
+                        const isOfficial = currentUser?.role === "official";
+                        const canTransition = isOfficial && idx !== currentStep;
+                        
+                        const isCloseStage = stage.value === "Verified & Closed";
+                        const verificationSuccess = selectedIssue.resolutionVerification?.status === "Resolved";
+                        const isDisabledClose = isCloseStage && !verificationSuccess;
 
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`font-bold uppercase tracking-wider text-[10px] ${
-                              isActive ? "text-indigo-400 font-black" :
-                              isCompleted ? "text-slate-300" : "text-slate-500"
+                        return (
+                          <div 
+                            key={idx} 
+                            onClick={() => {
+                              if (canTransition && !isDisabledClose) {
+                                handleUpdateStatus(selectedIssue.id, stage.value);
+                              }
+                            }}
+                            className={`relative flex flex-col items-center flex-1 z-10 select-none ${
+                              canTransition && !isDisabledClose ? "cursor-pointer hover:scale-105" : "cursor-default"
+                            }`}
+                            title={isDisabledClose ? "Successful AI verification is required to Close this ticket." : ""}
+                          >
+                            {/* Circle Dot indicator */}
+                            <div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
+                              isCompleted ? "bg-emerald-500 border-emerald-400 text-white shadow-lg shadow-emerald-500/20" :
+                              isActive ? "bg-indigo-500 border-indigo-400 text-white animate-pulse shadow-lg shadow-indigo-500/20" :
+                              "bg-slate-950 border-slate-855 text-slate-500"
                             }`}>
-                              {stage.name}
-                            </span>
+                              {isCompleted ? (
+                                <Check className="w-4 h-4 stroke-[3]" />
+                              ) : isActive && stage.value === "AI Verification" ? (
+                                <Brain className="w-4 h-4 text-indigo-400 animate-bounce" />
+                              ) : (
+                                <span className="text-[11px] font-bold font-mono">{idx + 1}</span>
+                              )}
+                            </div>
 
-                            {isActive && (
-                              <span className="text-[7.5px] bg-indigo-950 text-indigo-400 px-1.5 py-0.2 rounded border border-indigo-900/30 uppercase font-bold font-mono">
-                                Current
+                            {/* Label */}
+                            <div className="mt-2 text-center flex flex-col items-center">
+                              <span className={`font-bold uppercase tracking-wider text-[8.5px] whitespace-nowrap ${
+                                isActive ? "text-indigo-400 font-extrabold" :
+                                isCompleted ? "text-slate-300 font-semibold" : "text-slate-500"
+                              }`}>
+                                {stage.name}
                               </span>
-                            )}
 
-                            {isDisabledClose && (
-                              <span className="text-[7.5px] bg-red-950/20 text-red-400 px-1.5 py-0.2 rounded border border-red-900/30 uppercase font-bold font-mono">
-                                Locked (AI Audit Req.)
-                              </span>
-                            )}
+                              {isActive && (
+                                <span className="mt-0.5 text-[6.5px] bg-indigo-950 text-indigo-400 px-1 py-0.2 rounded border border-indigo-900/30 uppercase font-bold font-mono">
+                                  Current
+                                </span>
+                              )}
+
+                              {isDisabledClose && (
+                                <span className="mt-0.5 text-[6.5px] bg-red-950/20 text-red-400 px-1 py-0.2 rounded border border-red-900/30 uppercase font-bold font-mono">
+                                  Locked
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
