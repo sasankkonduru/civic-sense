@@ -14,6 +14,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<string>("landing");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const shouldReduceMotion = useReducedMotion();
 
   // Load session from localStorage on mount and sync with Firebase Auth
   useEffect(() => {
@@ -149,7 +150,7 @@ export default function App() {
     );
   }
 
-  const shouldReduceMotion = useReducedMotion();
+
   const pageVariants = shouldReduceMotion ? {
     initial: { opacity: 0 },
     animate: { opacity: 1, transition: { duration: 0.1 } },
