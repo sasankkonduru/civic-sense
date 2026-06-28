@@ -3,6 +3,7 @@
 - [ ] Add `heatmapMode` to `IssueMap.tsx` and render Leaflet circles
 - [ ] Connect `heatmapMode` controls to map header inside `DashboardPage.tsx`
 - [ ] Calculate dynamic City Health Score circular telemetry
+- [ ] Calculate Citizen Reputation Points and Badges logic
 - [ ] Overhaul executive bento layout at the top of the dashboard
 - [ ] Implement Timeframe Filters (Today / Week / Month)
 - [ ] Implement Infrastructure Health Score by City logic
