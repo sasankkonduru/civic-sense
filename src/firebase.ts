@@ -45,7 +45,12 @@ try {
 }
 export const storage = storageInstance;
 
+let isStorageVerifiedUnavailable = false;
+
 export function isStorageConfigured(): boolean {
+  if (isStorageVerifiedUnavailable) {
+    return false;
+  }
   return (
     !!storage &&
     !!firebaseConfig.storageBucket &&
@@ -53,6 +58,24 @@ export function isStorageConfigured(): boolean {
     !firebaseConfig.storageBucket.includes("YOUR_") &&
     !firebaseConfig.storageBucket.includes("<")
   );
+}
+
+export function markStorageAsUnavailable() {
+  isStorageVerifiedUnavailable = true;
+}
+
+// Helper to wrap a promise with a timeout limit
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+  });
+  
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+  });
 }
 
 
@@ -168,29 +191,35 @@ export async function logOut() {
 // Storage upload helpers
 export async function uploadFileToStorage(file: File, path: string): Promise<string> {
   if (!isStorageConfigured()) {
-    throw new Error("Firebase Storage is not configured.");
+    throw new Error("Firebase Storage is not configured or has been marked as unavailable.");
   }
   try {
     const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storageRef, file);
-    return await getDownloadURL(snapshot.ref);
+    const uploadPromise = uploadBytes(storageRef, file).then(
+      async (snapshot) => await getDownloadURL(snapshot.ref)
+    );
+    return await withTimeout(uploadPromise, 4000, "Firebase Storage upload timed out.");
   } catch (err) {
-    console.error("Storage uploadFileToStorage failed:", err);
+    console.error("Storage uploadFileToStorage failed, marking storage as unavailable:", err);
+    markStorageAsUnavailable();
     throw err;
   }
 }
 
 export async function uploadBase64ToStorage(base64String: string, path: string): Promise<string> {
   if (!isStorageConfigured()) {
-    throw new Error("Firebase Storage is not configured.");
+    throw new Error("Firebase Storage is not configured or has been marked as unavailable.");
   }
   try {
     const storageRef = ref(storage, path);
     const format = base64String.startsWith("data:") ? "data_url" : "base64";
-    const snapshot = await uploadString(storageRef, base64String, format);
-    return await getDownloadURL(snapshot.ref);
+    const uploadPromise = uploadString(storageRef, base64String, format).then(
+      async (snapshot) => await getDownloadURL(snapshot.ref)
+    );
+    return await withTimeout(uploadPromise, 4000, "Firebase Storage upload timed out.");
   } catch (err) {
-    console.error("Storage uploadBase64ToStorage failed:", err);
+    console.error("Storage uploadBase64ToStorage failed, marking storage as unavailable:", err);
+    markStorageAsUnavailable();
     throw err;
   }
 }
