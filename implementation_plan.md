@@ -1,53 +1,70 @@
-# Implementation Plan - AI Municipal Command Center, Intelligence & Reputation System
+# Implementation Plan - AI Municipal Command Center, Intelligence, Reputation & Demo Mode
 
-This plan outlines the layout modifications, dynamic calculations, and custom leaflet rendering overrides required to implement the **AI Municipal Command Center**, **Executive Intelligence System**, and **Citizen Reputation System** in the CivicSense frontend.
+This plan outlines the layout modifications, dynamic calculations, Leaflet overrides, and Demo Mode integration required to implement the **AI Municipal Command Center**, **Executive Intelligence System**, **Citizen Reputation System**, and **Hackathon Demo Mode** in the CivicSense frontend.
 
 ## 1. User Review Required
 
 > [!IMPORTANT]
 > - All Firestore schemas and database endpoints remain completely unchanged.
-> - Calculations for the City Health Score, city-by-city infrastructure ratings, category trends, and citizen reputation points are computed in real-time on the client side directly from the geocoded issues stream.
-> - Toggling the "Heatmap View" overlay renders soft blending circles at density centers, providing high-fidelity visual context.
+> - A global floating **Demo Mode Panel** is rendered in `App.tsx` (fixed bottom-right corner) to toggle the Hackathon presentation mode.
+> - When **Demo Mode** is enabled, it merges the live Firestore data with the 20 high-fidelity geocoded seed issues from `seedData.ts`. This ensures a pristine 20+ issue dataset is visible while still allowing live report submissions to show up.
+> - An interactive map toggle for "Satellite Heatmap View" renders soft blending density circles.
 
 ## 2. Proposed Changes
 
+### Global Layout & Demo Toggle
+
+#### [MODIFY] [App.tsx](file:///c:/Users/Sankar%20Konduru/Desktop/Sasank%20Konduru/develop/civic-sense/src/App.tsx)
+
+- Declare a global `demoMode` state backed by `localStorage` persistence.
+- Add a floating UI panel in the bottom-right corner (`fixed bottom-4 right-4 z-50`):
+  - Glassmorphic design (`bg-slate-950/80 backdrop-blur border border-indigo-500/30`).
+  - Active pulsing status ring (green for enabled, slate for disabled).
+  - Switches `demoMode` state on click.
+- Pass `demoMode` to all pages.
+
+---
+
 ### Dashboard Component
 
-#### [MODIFY] [DashboardPage.tsx](file:///c:/Users/Sankar%20Konduru/Desktop/Sasank Konduru/develop/civic-sense/src/components/DashboardPage.tsx)
+#### [MODIFY] [DashboardPage.tsx](file:///c:/Users/Sankar%20Konduru/Desktop/Sasank%20Konduru/develop/civic-sense/src/components/DashboardPage.tsx)
+
+- **Calculations & Seeding Override**:
+  - Accept `demoMode` as a prop.
+  - If `demoMode` is true, automatically run `seedDemoIssuesIfEmpty()` on mount.
+  - Compute the display issues list as:
+    ```typescript
+    const displayIssues = demoMode
+      ? [
+          ...issues.filter(i => !i.id.startsWith("seed-issue-")),
+          ...getSeededIssues()
+        ]
+      : issues;
+    ```
+  - Use `displayIssues` for City Health Score, Daily Brief filters, Resolution stats, and maps.
 
 - **AI Municipal Command Center Panel (Bento Grid at Top)**:
-  - **Left Section (Col-span 3)**: **City Health Score (0-100)** circular telemetry widget.
+  - **Left Section (Col-span 3)**: **City Health Score (0-100)** circular progress indicator.
   - **Middle Section (Col-span 5)**: **AI Municipal Daily Brief** (Gemini text or local fallback summary).
-  - **Right Section (Col-span 4)**: **Resolution Performance** stats + **Emergency Alerts** alerts list (flashing warning banners triggered by active leaks, garbage piles, or light clusters).
+  - **Right Section (Col-span 4)**: **Resolution Performance** stats + **Emergency Alerts** alerts list.
 
 - **Citizen Reputation System (For Citizen Users)**:
-  - Add a **Citizen Reputation Profile** bento card displaying:
-    - Current Badge: **Bronze Reporter** (Bronze border), **Silver Reporter** (Silver border), **Gold Reporter** (Gold border), or **Civic Champion** (Holographic pulsing border).
-    - Current Reputation Points with progress bar to next tier.
-    - Key stats: **Total Reports**, **Resolved Reports**, and **Accuracy Rate**.
-  - Points formula based on citizen reports:
-    - Unique report (not duplicate): `+10 points`
-    - Verified report (beyond "Reported" status): `+20 points`
-    - Resolved report ("Resolved" / "Closed" status): `+30 points`
+  - Render a **Citizen Reputation Profile** bento card for logged-in citizens displaying:
+    - Badges: Bronze, Silver, Gold, or Civic Champion.
+    - Points based on unique reports (+10), verified reports (+20), and resolved reports (+30).
+    - Accuracy percentage and total resolved stats.
 
-- **Executive Municipal Intelligence System (Bottom/Analytics Panel)**:
-  - **Time Filter Controls**: Today / Week / Month selector.
-  - **Dynamic Time Filtering**: Filters the active issues list before processing charts and AI trends.
-  - **Infrastructure Health Score by City**: City-level scores calculated as:
-    `100 - (criticalCount * 12 + openCount * 4)`, displayed in a comparative list.
-  - **Interactive Category Trends Chart**: An interactive SVG Bar Chart displaying active counts for Potholes, Garbage, Water Leakages, Streetlights, and Road Damages, with hover tooltips and dynamic color codes.
-  - **AI Trend Summary**:
-    - **Fastest growing category**: Calculated as the category with the most issues in the filtered timeframe.
-    - **Highest risk city**: City with the lowest health score.
-    - **Resolution bottlenecks**: Department with the largest unassigned or unresolved queue.
-    - **Infrastructure recommendations**: Dynamic operational recommendations based on active bottlenecks.
+- **Executive Municipal Intelligence System (Analytics Panel)**:
+  - Today / Week / Month timeframe selector.
+  - Comparative list of **Infrastructure Health Score by City**.
+  - Interactive SVG Category Trends Bar Chart.
+  - **AI Trend Summary**: Fastest growing category, Highest risk city, Resolution bottlenecks, and Recommendations.
 
 - **Leaflet Map Heatmap Integration**:
-  - Add `heatmapMode` state variable and a header button overlay to toggle the view.
-  - Pass `heatmapMode` to `IssueMap` component.
+  - Header button overlay to toggle between "Satellite Heatmap View" and "Marker View".
 
-- **Triage Progress Timeline Animation**:
-  - Animate the issue details progress timeline connector and dots with the spring and ring pulse animations.
+- **Timeline Status Animations**:
+  - Integrate spring and active pulsing ring animations into the drawer workflow timeline.
 
 ---
 
@@ -55,13 +72,11 @@ This plan outlines the layout modifications, dynamic calculations, and custom le
 
 #### [MODIFY] [IssueMap.tsx](file:///c:/Users/Sankar%20Konduru/Desktop/Sasank%20Konduru/develop/civic-sense/src/components/IssueMap.tsx)
 
-- **Support `heatmapMode` Props**:
-  Update `IssueMapProps` interface to accept `heatmapMode?: boolean`.
-- **Render Heatmap Circles**:
-  If `heatmapMode` is active, render Leaflet `<Circle>` components instead of marker popups:
-  - Map cluster densities to circle sizes: `radius = 120 + cluster.issues.length * 90` meters.
-  - Map cluster severity to colors: Red for Critical, Orange for High, Yellow for Medium.
-  - Apply semi-transparent styling: `fillOpacity = 0.45` to allow overlapping layers to blend naturally like a GIS heatmap.
+- Support `heatmapMode?: boolean` in `IssueMapProps`.
+- If `heatmapMode` is active, render Leaflet `<Circle>` components at cluster points instead of standard marker icons:
+  - Radius maps to density: `radius = 120 + cluster.issues.length * 90` meters.
+  - Color maps to highest severity.
+  - Apply semi-transparent styling: `fillOpacity = 0.45` to create natural blending overlays.
 
 ---
 
@@ -72,6 +87,5 @@ This plan outlines the layout modifications, dynamic calculations, and custom le
 - Run `npm run build` to package the production application.
 
 ### Manual Verification
-- Verify that toggling "Heatmap View" displays blending circular density zones on the map.
-- Verify that switching "Today", "Week", and "Month" filters correctly updates chart data and city health stats in real-time.
-- Verify that a logged-in citizen's profile displays their reputation badge, accuracy percentage, and resolution count correctly.
+- Toggle "Demo Mode" and confirm 20+ issues instantly populate the map and stats.
+- Submit a new report and confirm it dynamically merges into the active demo list.
