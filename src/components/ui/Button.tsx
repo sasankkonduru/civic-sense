@@ -1,5 +1,6 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 
 interface ButtonProps extends React.ComponentPropsWithoutRef<"button"> {
   variant?: "primary" | "secondary" | "outline" | "ghost" | "glass" | "danger" | "success";
@@ -20,7 +21,7 @@ export default function Button({
   disabled,
   ...props
 }: ButtonProps) {
-  const baseStyles = "inline-flex items-center justify-center font-semibold rounded-2xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-primary/50 disabled:opacity-50 disabled:pointer-events-none cursor-pointer transform active:scale-98 select-none font-sans";
+  const baseStyles = "inline-flex items-center justify-center font-semibold rounded-2xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-primary/50 disabled:opacity-50 disabled:pointer-events-none cursor-pointer select-none font-sans";
   
   const variants = {
     primary: "bg-gradient-to-r from-brand-primary to-brand-secondary hover:from-brand-primary-hover hover:to-purple-600 text-white shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 border border-transparent",
@@ -38,11 +39,19 @@ export default function Button({
     lg: "px-7 py-3.5 text-base gap-2.5",
   };
 
+  const shouldReduceMotion = useReducedMotion();
+  const motionProps = shouldReduceMotion ? {} : {
+    whileHover: { y: -1, scale: 1.02 },
+    whileTap: { scale: 0.98 },
+    transition: { type: "spring", stiffness: 450, damping: 14 }
+  };
+
   return (
-    <button
+    <motion.button
       disabled={disabled || loading}
       className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
-      {...props}
+      {...motionProps}
+      {...(props as any)}
     >
       {loading ? (
         <Loader2 className="w-4 h-4 animate-spin shrink-0" />
@@ -51,6 +60,7 @@ export default function Button({
       )}
       <span>{children}</span>
       {!loading && rightIcon && <span className="shrink-0">{rightIcon}</span>}
-    </button>
+    </motion.button>
   );
 }
+

@@ -1,4 +1,5 @@
 import React from "react";
+import { motion, useReducedMotion } from "motion/react";
 
 interface BadgeProps {
   children: React.ReactNode;
@@ -37,15 +38,25 @@ export default function Badge({
     brand: "bg-indigo-400",
   };
 
+  const shouldReduceMotion = useReducedMotion();
+  const hoverAnimation = shouldReduceMotion ? {} : { whileHover: { scale: 1.05 } };
+
   return (
-    <span className={`${baseStyles} ${variants[variant]} ${className}`}>
+    <motion.span 
+      className={`${baseStyles} ${variants[variant]} ${className}`}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      {...hoverAnimation}
+      transition={{ duration: 0.2 }}
+    >
       {dot && (
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 animate-pulse ${dotColors[variant]}`} />
       )}
       {children}
-    </span>
+    </motion.span>
   );
 }
+
 
 // Helper to resolve severity level to variant
 export function getSeverityVariant(severity: string | undefined): "critical" | "high" | "medium" | "low" | "default" {

@@ -88,3 +88,60 @@ export function AILoader({ message = "AI Triage System Analysing..." }: { messag
     </div>
   );
 }
+
+// Skeleton Grid for Dashboard KPI Stats Cards
+export function SkeletonStats() {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {Array.from({ length: 4 }).map((_, idx) => (
+        <div key={idx} className="bg-m3-surface-variant/40 border border-m3-outline rounded-3xl p-5 space-y-3 animate-pulse">
+          <div className="flex justify-between items-center">
+            <div className="h-3.5 bg-slate-800 rounded-lg w-1/2"></div>
+            <div className="w-6 h-6 bg-slate-850 rounded-lg"></div>
+          </div>
+          <div className="h-8 bg-slate-800 rounded-lg w-2/3"></div>
+          <div className="h-3 bg-slate-800 rounded-lg w-3/4"></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Skeleton loader for AI Insights list
+export function SkeletonInsights() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      {Array.from({ length: 2 }).map((_, idx) => (
+        <div key={idx} className="bg-indigo-950/5 border border-slate-900 rounded-3xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="h-4 bg-slate-800 rounded-lg w-1/3"></div>
+            <div className="h-4 bg-slate-800 rounded-full w-20"></div>
+          </div>
+          <div className="space-y-2">
+            <div className="h-3 bg-slate-800 rounded-lg w-full"></div>
+            <div className="h-3 bg-slate-800 rounded-lg w-5/6"></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Skeleton loader for Map panels
+export function SkeletonMap() {
+  return (
+    <div className="w-full h-[500px] bg-m3-surface-variant/30 border border-m3-outline rounded-[2.5rem] relative overflow-hidden animate-pulse flex items-center justify-center">
+      <div className="absolute inset-0 bg-slate-900/40" />
+      <div className="absolute top-4 left-4 bg-slate-950 border border-slate-850 p-4 rounded-2xl w-48 space-y-2">
+        <div className="h-3 bg-slate-850 rounded w-2/3"></div>
+        <div className="h-3 bg-slate-850 rounded w-1/2"></div>
+      </div>
+      <div className="absolute top-4 right-4 bg-slate-950 border border-slate-850 p-3 rounded-2xl w-24 h-10"></div>
+      <div className="text-slate-600 flex flex-col items-center space-y-2 relative z-10">
+        <div className="w-10 h-10 bg-slate-850 rounded-full animate-bounce"></div>
+        <div className="h-3 bg-slate-850 rounded-lg w-36"></div>
+      </div>
+    </div>
+  );
+}
+

@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "re
 import L from "leaflet";
 import { Locate, MapPin, AlertCircle, Calendar, ShieldAlert, Sparkles, Compass, Layers, Clock, Brain, Building } from "lucide-react";
 import { Issue } from "../types";
+import { motion, useReducedMotion } from "motion/react";
 import "leaflet/dist/leaflet.css";
 
 // Pre-defined list of major Indian cities for instant offline lookup
@@ -48,16 +49,21 @@ const createCustomIcon = (severity: string) => {
       <style>
         @keyframes subtleMarkerFloat {
           0% { transform: translateY(0px) scale(1); }
-          50% { transform: translateY(-3px) scale(1.05); }
+          50% { transform: translateY(-3.5px) scale(1.04); }
           100% { transform: translateY(0px) scale(1); }
         }
         .custom-map-marker-float {
-          animation: subtleMarkerFloat 3s ease-in-out infinite;
+          animation: subtleMarkerFloat 3.5s ease-in-out infinite;
+        }
+        .custom-leaflet-marker:hover .relative-dot {
+          transform: scale(1.25) translateY(-2px) !important;
+          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4), 0 0 15px ${current.bg} !important;
+          filter: brightness(1.1);
         }
       </style>
       <div class="relative flex items-center justify-center w-8 h-8 custom-map-marker-float">
         <div class="absolute w-6 h-6 rounded-full animate-ping opacity-60" style="background-color: ${current.pulse};"></div>
-        <div class="relative w-5 h-5 rounded-full border-2 flex items-center justify-center shadow-lg transition-all hover:scale-120 duration-200" 
+        <div class="relative-dot relative w-5 h-5 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ease-out" 
              style="background-color: ${current.bg}; border-color: ${current.border};">
           <div class="w-1.5 h-1.5 bg-white rounded-full"></div>
         </div>
@@ -250,6 +256,7 @@ export const IssueMap: React.FC<IssueMapProps> = ({
   onSelectIssue,
   selectedIssueId,
 }) => {
+  const shouldReduceMotion = useReducedMotion();
   const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]); // Default India
   const [mapZoom, setMapZoom] = useState<number>(5); // Default wide view for India
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
@@ -396,7 +403,12 @@ export const IssueMap: React.FC<IssueMapProps> = ({
     <div className="relative w-full h-full min-h-[350px] bg-slate-950 rounded-3xl overflow-hidden border border-slate-900 shadow-inner group animate-none" id="leaflet-map-wrapper">
       
       {/* Top Left Floating Indicator (City Name & Active Count) */}
-      <div className="absolute top-3 left-3 z-[500] pointer-events-none flex flex-col gap-2 max-w-[280px] sm:max-w-[340px]">
+      <motion.div 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -10, y: -10 }}
+        animate={{ opacity: 1, x: 0, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="absolute top-3 left-3 z-[500] pointer-events-none flex flex-col gap-2 max-w-[280px] sm:max-w-[340px]"
+      >
         <div className="pointer-events-auto bg-slate-950/85 backdrop-blur-md border border-indigo-500/30 rounded-2xl p-3 shadow-xl flex items-center space-x-3 text-white transition-all duration-300 hover:border-indigo-400/50">
           <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center shrink-0">
             <Compass className="w-4.5 h-4.5 text-sky-400 animate-pulse" />
@@ -422,10 +434,15 @@ export const IssueMap: React.FC<IssueMapProps> = ({
             </span>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Bottom Left Floating Legend (Critical Red, High Orange, Medium Yellow, Low Green) */}
-      <div className="absolute bottom-3 left-3 z-[500] pointer-events-none">
+      <motion.div 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -10, y: 10 }}
+        animate={{ opacity: 1, x: 0, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut", delay: 0.1 }}
+        className="absolute bottom-3 left-3 z-[500] pointer-events-none"
+      >
         <div className="pointer-events-auto bg-slate-950/85 backdrop-blur-md border border-indigo-500/20 rounded-xl p-3 shadow-lg text-white space-y-1.5 min-w-[120px]">
           <p className="text-[8px] font-extrabold text-indigo-300 uppercase tracking-widest font-mono">
             SEVERITY SCALE
@@ -444,7 +461,7 @@ export const IssueMap: React.FC<IssueMapProps> = ({
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       <MapContainer
         center={mapCenter}

@@ -5,7 +5,7 @@ import {
   FileText, Clock, ShieldAlert, Timer, CloudLightning, Camera, HelpCircle,
   Layers, Compass, BarChart2, UserCheck, ArrowUpRight, ChevronRight
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { Issue } from "../types";
@@ -170,6 +170,7 @@ function AINetworkBackground() {
 }
 
 export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageProps) {
+  const shouldReduceMotion = useReducedMotion();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTimelineStep, setActiveTimelineStep] = useState(0);
@@ -518,7 +519,13 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
       </section>
 
       {/* Statistics Section (Viewport Animated) */}
-      <section className="bg-slate-950 border-y border-slate-900/80 py-20 relative z-10">
+      <motion.section 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="bg-slate-950 border-y border-slate-900/80 py-20 relative z-10"
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-xl mx-auto mb-16 space-y-2.5">
@@ -642,10 +649,16 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
 
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* Feature Cards Grid (6 Premium Cards) */}
-      <section className="bg-slate-950 py-24 border-t border-slate-900/60 relative z-10">
+      <motion.section 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="bg-slate-950 py-24 border-t border-slate-900/60 relative z-10"
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-2xl mx-auto mb-20 space-y-3">
@@ -750,10 +763,16 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
 
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* "How CivicSense Works" Timeline (5 Steps) */}
-      <section className="bg-slate-950 py-24 sm:py-32 relative z-10 border-t border-slate-900/60">
+      <motion.section 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="bg-slate-950 py-24 sm:py-32 relative z-10 border-t border-slate-900/60"
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-2xl mx-auto space-y-3 mb-20">
@@ -888,10 +907,16 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
 
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* Premium CTA Panel */}
-      <section className="bg-slate-950 py-24 relative overflow-hidden z-10 border-t border-slate-900/60">
+      <motion.section 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="bg-slate-950 py-24 relative overflow-hidden z-10 border-t border-slate-900/60"
+      >
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[300px] bg-indigo-500/10 rounded-full filter blur-[130px] opacity-20 -z-10" />
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center space-y-8">
@@ -924,7 +949,7 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
             </Button>
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* Footer */}
       <footer className="bg-slate-950 text-slate-500 border-t border-slate-900 py-12 relative z-10">

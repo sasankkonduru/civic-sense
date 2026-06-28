@@ -4,7 +4,7 @@ import {
   RefreshCw, Filter, Eye, User, FileText, ChevronRight, Check, AlertCircle, Sparkles,
   Upload, Image as ImageIcon, Timer, ArrowLeft, LogOut, Building, Building2, Trash2, ShieldCheck
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db, updateFirestoreIssue, uploadBase64ToStorage, deleteFirestoreIssue } from "../firebase";
 import { Issue } from "../types";
@@ -48,6 +48,7 @@ const DEPARTMENTS = [
 ];
 
 export default function OfficialPage({ onNavigate, currentUser, onLogout }: OfficialPageProps) {
+  const shouldReduceMotion = useReducedMotion();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loadingIssues, setLoadingIssues] = useState(true);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
@@ -356,6 +357,18 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
     );
   }
 
+  const listContainerVariants = shouldReduceMotion ? {} : {
+    visible: { transition: { staggerChildren: 0.04 } }
+  };
+  
+  const listItemVariants = shouldReduceMotion ? {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1 }
+  } : {
+    hidden: { opacity: 0, y: 8 },
+    visible: { opacity: 1, y: 0 }
+  };
+
   return (
     <div className="min-h-screen bg-slate-955 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white relative overflow-hidden">
       
@@ -517,59 +530,68 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                 <p className="text-xs text-slate-400 font-bold">No issues found matching constraints.</p>
               </div>
             ) : (
-              filteredIssues.map((issue) => {
-                const isSelected = selectedIssue?.id === issue.id;
-                return (
-                  <button
-                    key={issue.id}
-                    id={`triage-ticket-${issue.id}`}
-                    onClick={() => setSelectedIssue(issue)}
-                    className={`w-full text-left p-4 rounded-2xl border transition-all flex flex-col space-y-3 cursor-pointer ${
-                      isSelected 
-                        ? "bg-indigo-955/20 border-indigo-500/50 shadow-lg" 
-                        : "bg-slate-900/30 border-slate-900 hover:bg-slate-900/60 hover:border-slate-805"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <div className="flex items-center space-x-1.5">
-                        <Badge variant={getSeverityVariant(issue.severity)}>
-                          {issue.severity}
+              <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={listContainerVariants}
+                className="space-y-3"
+              >
+                {filteredIssues.map((issue) => {
+                  const isSelected = selectedIssue?.id === issue.id;
+                  return (
+                    <motion.button
+                      key={issue.id}
+                      id={`triage-ticket-${issue.id}`}
+                      variants={listItemVariants}
+                      whileHover={shouldReduceMotion ? {} : { y: -2, x: 2 }}
+                      onClick={() => setSelectedIssue(issue)}
+                      className={`w-full text-left p-4 rounded-2xl border transition-all flex flex-col space-y-3 cursor-pointer ${
+                        isSelected 
+                          ? "bg-indigo-955/20 border-indigo-500/50 shadow-lg" 
+                          : "bg-slate-900/30 border-slate-900 hover:bg-slate-900/60 hover:border-slate-805"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center space-x-1.5">
+                          <Badge variant={getSeverityVariant(issue.severity)}>
+                            {issue.severity}
+                          </Badge>
+                          <span className="text-[10px] font-bold text-slate-500 font-mono">ID: {issue.id.slice(0, 8)}</span>
+                        </div>
+                        
+                        <Badge variant={getStatusVariant(issue.status)}>
+                          {issue.status}
                         </Badge>
-                        <span className="text-[10px] font-bold text-slate-500 font-mono">ID: {issue.id.slice(0, 8)}</span>
                       </div>
-                      
-                      <Badge variant={getStatusVariant(issue.status)}>
-                        {issue.status}
-                      </Badge>
-                    </div>
 
-                    <div className="space-y-1">
-                      <h4 className="text-xs font-black text-slate-205 line-clamp-1">
-                        {issue.title}
-                      </h4>
-                      <p className="text-[10px] text-slate-450 font-medium flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-slate-550 shrink-0" />
-                        <span className="truncate">{issue.location}</span>
-                      </p>
-                    </div>
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-black text-slate-205 line-clamp-1">
+                          {issue.title}
+                        </h4>
+                        <p className="text-[10px] text-slate-450 font-medium flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-slate-555 shrink-0" />
+                          <span className="truncate">{issue.location}</span>
+                        </p>
+                      </div>
 
-                    <div className="pt-2.5 border-t border-slate-900/80 flex justify-between items-center text-[10px] text-slate-500 font-mono">
-                      <span className="flex items-center gap-1 font-bold text-slate-400 font-sans">
-                        <Building className="w-3.5 h-3.5 text-slate-500" />
-                        <span className="truncate max-w-[150px]">
-                          {issue.department || "Unassigned Dept"}
+                      <div className="pt-2.5 border-t border-slate-900/80 flex justify-between items-center text-[10px] text-slate-500 font-mono">
+                        <span className="flex items-center gap-1 font-bold text-slate-400 font-sans">
+                          <Building className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="truncate max-w-[150px]">
+                            {issue.department || "Unassigned Dept"}
+                          </span>
                         </span>
-                      </span>
-                      <span>
-                        {new Date(issue.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric"
-                        })}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })
+                        <span>
+                          {new Date(issue.createdAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric"
+                          })}
+                        </span>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </motion.div>
             )}
           </div>
         </div>
@@ -637,11 +659,12 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                       <div className="absolute top-[18px] left-8 right-8 h-0.5 bg-slate-800/80 z-0" />
                       
                       {/* Active Progress Connector Line */}
-                      <div 
-                        className="absolute top-[18px] left-8 h-0.5 bg-indigo-500 transition-all duration-300 z-0"
-                        style={{ 
+                      <motion.div 
+                        className="absolute top-[18px] left-8 h-0.5 bg-indigo-500 z-0"
+                        animate={{ 
                           width: `calc(${((getStatusStep(selectedIssue.status)) / (STAGES.length - 1)) * 100}% - ${getStatusStep(selectedIssue.status) === 0 ? 0 : 32}px)`
                         }}
+                        transition={{ type: "spring", stiffness: 100, damping: 18 }}
                       />
 
                       {STAGES.map((stage, idx) => {
@@ -669,11 +692,23 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                             title={isDisabledClose ? "Successful AI verification is required to Close this ticket." : ""}
                           >
                             {/* Circle Dot indicator */}
-                            <div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
-                              isCompleted ? "bg-emerald-500 border-emerald-400 text-white shadow-lg shadow-emerald-500/20" :
-                              isActive ? "bg-indigo-500 border-indigo-400 text-white animate-pulse shadow-lg shadow-indigo-500/20" :
-                              "bg-slate-950 border-slate-855 text-slate-500"
-                            }`}>
+                            <motion.div 
+                              whileHover={canTransition && !isDisabledClose && !shouldReduceMotion ? { scale: 1.15 } : {}}
+                              whileTap={canTransition && !isDisabledClose && !shouldReduceMotion ? { scale: 0.95 } : {}}
+                              animate={isActive && !shouldReduceMotion ? {
+                                boxShadow: ["0 0 0 0px rgba(99, 102, 241, 0.4)", "0 0 0 8px rgba(99, 102, 241, 0)"]
+                              } : {}}
+                              transition={isActive && !shouldReduceMotion ? {
+                                repeat: Infinity,
+                                duration: 1.5,
+                                ease: "easeInOut"
+                              } : {}}
+                              className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
+                                isCompleted ? "bg-emerald-500 border-emerald-400 text-white shadow-lg shadow-emerald-500/20" :
+                                isActive ? "bg-indigo-500 border-indigo-400 text-white shadow-lg shadow-indigo-500/20" :
+                                "bg-slate-950 border-slate-855 text-slate-500"
+                              }`}
+                            >
                               {isCompleted ? (
                                 <Check className="w-4 h-4 stroke-[3]" />
                               ) : isActive && stage.value === "AI Verification" ? (
@@ -681,7 +716,7 @@ export default function OfficialPage({ onNavigate, currentUser, onLogout }: Offi
                               ) : (
                                 <span className="text-[11px] font-bold font-mono">{idx + 1}</span>
                               )}
-                            </div>
+                            </motion.div>
 
                             {/* Label */}
                             <div className="mt-2 text-center flex flex-col items-center">

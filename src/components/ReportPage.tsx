@@ -566,8 +566,14 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
               className="space-y-6"
             >
               <Card variant="glass" glow="emerald" className="p-8 text-center space-y-6">
-                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
-                  <ShieldCheck className="w-9 h-9 animate-pulse" />
+                <div className="w-20 h-20 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400 shadow-lg shadow-emerald-500/10">
+                  <motion.div
+                    initial={{ scale: 0, rotate: -45 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 15, delay: 0.15 }}
+                  >
+                    <ShieldCheck className="w-10 h-10" />
+                  </motion.div>
                 </div>
                 
                 <div className="space-y-2">
@@ -981,17 +987,32 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                           onClick={() => fileInputRef.current?.click()}
                           className={`border-2 border-dashed rounded-3xl p-12 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center min-h-[260px] relative overflow-hidden group ${
                             isDragging
-                              ? "border-brand-primary bg-indigo-950/20"
+                              ? "border-indigo-500 bg-indigo-950/20 scale-[0.99] shadow-lg shadow-indigo-500/10"
                               : "border-slate-800 bg-slate-950/30 hover:border-indigo-500/50 hover:bg-slate-950/50"
                           }`}
                         >
                           <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/5 to-purple-500/0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                          <Upload className="w-12 h-12 text-slate-500 group-hover:text-indigo-400 mb-4 transition-all duration-300 group-hover:scale-105" />
+                          
+                          {/* Pulsing glow ring during dragging */}
+                          {isDragging && (
+                            <div className="absolute inset-0 bg-indigo-500/5 animate-pulse pointer-events-none" />
+                          )}
+
+                          <motion.div
+                            animate={isDragging ? { y: -6, scale: 1.1 } : { y: 0, scale: 1 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 15 }}
+                            className="shrink-0"
+                          >
+                            <Upload className={`w-12 h-12 mb-4 transition-colors duration-200 ${
+                              isDragging ? "text-indigo-400" : "text-slate-500 group-hover:text-indigo-400"
+                            }`} />
+                          </motion.div>
+
                           <div className="space-y-1 z-10">
                             <p className="text-sm font-bold text-slate-200">
                               <span className="text-indigo-400 group-hover:underline">Click to upload photograph</span> or drag & drop
                             </p>
-                            <p className="text-xs text-slate-500 font-medium font-mono">PNG, JPG, WEBP formats supported (up to 10MB)</p>
+                            <p className="text-xs text-slate-505 font-semibold font-mono">PNG, JPG, WEBP formats supported (up to 10MB)</p>
                           </div>
                           <input
                             type="file"

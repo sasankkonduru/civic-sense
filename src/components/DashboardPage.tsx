@@ -4,7 +4,7 @@ import {
   RefreshCw, TrendingUp, Filter, Eye, User, FileText, ChevronRight, Check, AlertCircle, Sparkles,
   Upload, Timer, ClipboardCheck, Building, Calendar, Activity, Trash2, Droplets, Lightbulb, Hammer, ShieldCheck
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db, updateFirestoreIssue, uploadBase64ToStorage, seedDemoIssuesIfEmpty } from "../firebase";
 import { Issue, AIInsight, DashboardStats, MunicipalInsights, MunicipalDailyBrief } from "../types";
@@ -37,8 +37,66 @@ const getStatusStep = (status: string | undefined): number => {
 import Button from "./ui/Button";
 import Badge, { getSeverityVariant, getStatusVariant } from "./ui/Badge";
 import { Card } from "./ui/Card";
-import { LoadingSpinner, SkeletonList, AILoader } from "./ui/Loading";
+import { LoadingSpinner, SkeletonList, AILoader, SkeletonStats, SkeletonInsights } from "./ui/Loading";
 import EmptyState from "./ui/EmptyState";
+
+// Viewport-aware Animated Number Counter
+function AnimatedNumber({ value, postfix = "" }: { value: number; postfix?: string }) {
+  const [displayValue, setDisplayValue] = React.useState(0);
+  const [hasEntered, setHasEntered] = React.useState(false);
+  const spanRef = React.useRef<HTMLSpanElement>(null);
+
+  React.useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setHasEntered(true);
+        observer.disconnect();
+      }
+    }, { threshold: 0.1 });
+    
+    if (spanRef.current) {
+      observer.observe(spanRef.current);
+    }
+    
+    return () => observer.disconnect();
+  }, []);
+
+  React.useEffect(() => {
+    if (!hasEntered) return;
+    let start = 0;
+    const end = value;
+    if (start === end) {
+      setDisplayValue(end);
+      return;
+    }
+
+    const duration = 1500; // 1.5 seconds
+    let startTime: number | null = null;
+
+    const animate = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(Math.floor(easeProgress * end));
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        setDisplayValue(end);
+      }
+    };
+
+    const animId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animId);
+  }, [value, hasEntered]);
+
+  return (
+    <span ref={spanRef} className="tabular-nums">
+      {displayValue}
+      {postfix}
+    </span>
+  );
+}
 
 interface DashboardPageProps {
   onNavigate: (page: string) => void;
@@ -75,6 +133,7 @@ function getCityLabel(location: string): string {
 }
 
 export default function DashboardPage({ onNavigate, currentUser, onLogout }: DashboardPageProps) {
+  const shouldReduceMotion = useReducedMotion();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [insights, setInsights] = useState<AIInsight[]>([]);
@@ -622,6 +681,19 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
     return matchCategory && matchStatus;
   });
 
+  const listContainerVariants = shouldReduceMotion ? {} : {
+    visible: { transition: { staggerChildren: 0.04 } }
+  };
+  
+  const listItemVariants = shouldReduceMotion ? {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1 }
+  } : {
+    hidden: { opacity: 0, y: 8 },
+    visible: { opacity: 1, y: 0 },
+    hover: { x: 3 }
+  };
+
   return (
     <div id="dashboard-page" className="min-h-screen bg-slate-955 text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-white pb-12 relative overflow-hidden">
       
@@ -944,14 +1016,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
 
         {/* Enhanced KPI Cards */}
         {!stats || loadingIssues || isSeeding ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-slate-900/40 p-6 rounded-3xl border border-slate-900 space-y-3 animate-pulse relative overflow-hidden min-h-[120px]">
-                <div className="h-4 bg-slate-800 rounded w-1/2"></div>
-                <div className="h-8 bg-slate-800 rounded w-1/3 mt-3"></div>
-              </div>
-            ))}
-          </div>
+          <SkeletonStats />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             
@@ -967,7 +1032,9 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                   </span>
                 </div>
                 <div className="flex items-baseline space-x-1.5">
-                  <span className="text-3xl font-black text-white tracking-tight">{stats.totalCount}</span>
+                  <span className="text-3xl font-black text-white tracking-tight">
+                    <AnimatedNumber value={stats.totalCount} />
+                  </span>
                   <span className="text-[10px] font-extrabold text-indigo-405 font-mono tracking-wider uppercase bg-indigo-955/35 px-1.5 py-0.5 rounded border border-indigo-900/25">
                     +12% Last Wk
                   </span>
@@ -976,7 +1043,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
             </motion.div>
 
             <motion.div whileHover={{ y: -5 }}>
-              <Card variant="interactive" className="p-6 h-full relative group overflow-hidden bg-gradient-to-br from-red-950/40 to-slate-900/20 border-red-900/30 shadow-lg shadow-red-950/5" glow={stats.criticalCount && stats.criticalCount > 0 ? "indigo" : "none"}>
+              <Card variant="interactive" className="p-6 h-full relative group overflow-hidden bg-gradient-to-br from-red-950/40 to-slate-900/20 border-red-900/30 shadow-lg shadow-red-955/5" glow={stats.criticalCount && stats.criticalCount > 0 ? "indigo" : "none"}>
                 <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-110 transition-transform duration-300">
                   <ShieldAlert className="w-24 h-24 text-red-400" />
                 </div>
@@ -987,7 +1054,9 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                   </span>
                 </div>
                 <div className="flex items-baseline space-x-1.5">
-                  <span className="text-3xl font-black text-white tracking-tight">{stats.criticalCount ?? 0}</span>
+                  <span className="text-3xl font-black text-white tracking-tight">
+                    <AnimatedNumber value={stats.criticalCount ?? 0} />
+                  </span>
                   <span className="text-[10px] font-extrabold text-red-405 font-mono tracking-wider uppercase bg-red-955/35 px-1.5 py-0.5 rounded border border-red-900/25">
                     Emergency Priority
                   </span>
@@ -1007,7 +1076,9 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                   </span>
                 </div>
                 <div className="flex items-baseline space-x-1.5">
-                  <span className="text-3xl font-black text-white tracking-tight">{stats.openCount ?? (stats.totalCount - stats.resolvedCount)}</span>
+                  <span className="text-3xl font-black text-white tracking-tight">
+                    <AnimatedNumber value={stats.openCount ?? (stats.totalCount - stats.resolvedCount)} />
+                  </span>
                   <span className="text-[10px] font-extrabold text-orange-405 font-mono tracking-wider uppercase bg-orange-955/35 px-1.5 py-0.5 rounded border border-orange-900/25">
                     Triage Dispatch
                   </span>
@@ -1027,7 +1098,9 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                   </span>
                 </div>
                 <div className="flex items-baseline space-x-1.5">
-                  <span className="text-3xl font-black text-white tracking-tight">{stats.resolvedCount}</span>
+                  <span className="text-3xl font-black text-white tracking-tight">
+                    <AnimatedNumber value={stats.resolvedCount} />
+                  </span>
                   <span className="text-[10px] font-extrabold text-emerald-405 font-mono tracking-wider uppercase bg-emerald-955/35 px-1.5 py-0.5 rounded border border-emerald-900/25">
                     {stats.totalCount > 0 ? Math.round((stats.resolvedCount / stats.totalCount) * 100) : 0}% Close Rate
                   </span>
@@ -1309,65 +1382,74 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                     />
                   </div>
                 ) : (
-                  filteredIssues.map((iss) => {
-                    const isSelected = selectedIssue?.id === iss.id;
-                    const cityLabel = getCityLabel(iss.location);
-                    return (
-                      <div
-                        key={iss.id}
-                        id={`issue-${iss.id}`}
-                        onClick={() => setSelectedIssue(iss)}
-                        className={`p-6 flex items-start space-x-4 cursor-pointer transition-all border-l-4 ${
-                          isSelected 
-                            ? "bg-indigo-950/20 border-l-brand-primary" 
-                            : "hover:bg-slate-900/30 border-l-transparent bg-slate-900/10"
-                        }`}
-                      >
-                        <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-850 flex items-center justify-center shrink-0">
-                          {getCategoryIcon(iss.category)}
-                        </div>
+                  <motion.div
+                    initial="hidden"
+                    animate="visible"
+                    variants={listContainerVariants}
+                    className="divide-y divide-slate-900"
+                  >
+                    {filteredIssues.map((iss) => {
+                      const isSelected = selectedIssue?.id === iss.id;
+                      const cityLabel = getCityLabel(iss.location);
+                      return (
+                        <motion.div
+                          key={iss.id}
+                          id={`issue-${iss.id}`}
+                          variants={listItemVariants}
+                          whileHover={shouldReduceMotion ? {} : "hover"}
+                          onClick={() => setSelectedIssue(iss)}
+                          className={`p-6 flex items-start space-x-4 cursor-pointer transition-all border-l-4 ${
+                            isSelected 
+                              ? "bg-indigo-950/20 border-l-brand-primary animate-pulse" 
+                              : "hover:bg-slate-900/30 border-l-transparent bg-slate-900/10"
+                          }`}
+                        >
+                          <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-855 flex items-center justify-center shrink-0">
+                            {getCategoryIcon(iss.category)}
+                          </div>
 
-                        <div className="space-y-1.5 min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge variant={getSeverityVariant(iss.severity)}>
-                              {iss.severity}
-                            </Badge>
-                            <Badge variant={getStatusVariant(iss.status)}>
-                              {iss.status}
-                            </Badge>
-                            {iss.priorityScore !== undefined && (
-                              <Badge variant="brand">
-                                <Sparkles className="w-2.5 h-2.5 shrink-0 text-brand-primary animate-pulse" />
-                                P{iss.priorityScore}
+                          <div className="space-y-1.5 min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant={getSeverityVariant(iss.severity)}>
+                                {iss.severity}
                               </Badge>
-                            )}
-                            <span className="text-[10px] font-bold text-sky-400 bg-sky-950/20 border border-sky-900/30 px-1.5 py-0.5 rounded font-mono">
-                              📍 {cityLabel}
-                            </span>
+                              <Badge variant={getStatusVariant(iss.status)}>
+                                {iss.status}
+                              </Badge>
+                              {iss.priorityScore !== undefined && (
+                                <Badge variant="brand">
+                                  <Sparkles className="w-2.5 h-2.5 shrink-0 text-brand-primary animate-pulse" />
+                                  P{iss.priorityScore}
+                                </Badge>
+                              )}
+                              <span className="text-[10px] font-bold text-sky-400 bg-sky-950/20 border border-sky-900/30 px-1.5 py-0.5 rounded font-mono">
+                                📍 {cityLabel}
+                              </span>
+                            </div>
+
+                            <h3 className="font-extrabold text-white tracking-tight truncate text-sm">
+                              {iss.title}
+                            </h3>
+
+                            <p className="text-xs text-slate-400 line-clamp-1">
+                              {iss.description}
+                            </p>
+
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-slate-500 pt-1 font-mono">
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5 text-indigo-405" />
+                                <span className="truncate max-w-[150px] sm:max-w-[250px]">{iss.location}</span>
+                              </span>
+                              <span>•</span>
+                              <span>{new Date(iss.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
                           </div>
 
-                          <h3 className="font-extrabold text-white tracking-tight truncate text-sm">
-                            {iss.title}
-                          </h3>
-
-                          <p className="text-xs text-slate-400 line-clamp-1">
-                            {iss.description}
-                          </p>
-
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-slate-550 pt-1 font-mono">
-                            <span className="flex items-center gap-1">
-                              <MapPin className="w-3.5 h-3.5 text-indigo-400" />
-                              <span className="truncate max-w-[150px] sm:max-w-[250px]">{iss.location}</span>
-                            </span>
-                            <span>•</span>
-                            <span>{new Date(iss.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                          </div>
-                        </div>
-
-                        <ChevronRight className="w-5 h-5 text-slate-600 self-center shrink-0" />
-                      </div>
-                    );
-                  })
+                          <ChevronRight className="w-5 h-5 text-slate-655 self-center shrink-0 transition-transform group-hover:translate-x-0.5" />
+                        </motion.div>
+                      );
+                    })}
+                  </motion.div>
                 )}
               </div>
             </Card>
@@ -1442,19 +1524,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
               <div className="space-y-4">
                 {/* Modern loading skeletons for insights loading state */}
                 {loadingInsights ? (
-                  <div className="space-y-4 py-2">
-                    {[...Array(2)].map((_, i) => (
-                      <div key={i} className="bg-slate-900/30 border border-slate-900 rounded-2xl p-4 space-y-3 animate-pulse">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-6 h-6 bg-slate-800 rounded-lg"></div>
-                          <div className="h-3.5 bg-slate-800 rounded w-1/3"></div>
-                          <div className="h-3 bg-slate-800 rounded w-12 ml-auto"></div>
-                        </div>
-                        <div className="h-3 bg-slate-800 rounded w-5/6"></div>
-                        <div className="h-3 bg-slate-800 rounded w-2/3"></div>
-                      </div>
-                    ))}
-                  </div>
+                  <SkeletonInsights />
                 ) : insights.length === 0 ? (
                   <p className="text-xs text-indigo-300 text-center py-4">No structural insights available.</p>
                 ) : (

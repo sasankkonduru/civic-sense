@@ -7,6 +7,8 @@ import DashboardPage from "./components/DashboardPage";
 import ReportPage from "./components/ReportPage";
 import OfficialPage from "./components/OfficialPage";
 import { User } from "./types";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<string>("landing");
@@ -147,45 +149,68 @@ export default function App() {
     );
   }
 
+  const shouldReduceMotion = useReducedMotion();
+  const pageVariants = shouldReduceMotion ? {
+    initial: { opacity: 0 },
+    animate: { opacity: 1, transition: { duration: 0.1 } },
+    exit: { opacity: 0, transition: { duration: 0.1 } }
+  } : {
+    initial: { opacity: 0, y: 8 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.2, ease: "easeOut" as const } },
+    exit: { opacity: 0, y: -8, transition: { duration: 0.15, ease: "easeIn" as const } }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 selection:bg-indigo-500 selection:text-white">
-      {currentPage === "landing" && (
-        <LandingPage 
-          onNavigate={handleNavigate} 
-          onLoginAsGuest={handleLoginAsGuest} 
-        />
-      )}
-      
-      {currentPage === "login" && (
-        <LoginPage 
-          onLogin={handleLogin} 
-          onNavigate={handleNavigate} 
-          userEmail="sasankkonduru@gmail.com" 
-        />
-      )}
-      
-      {currentPage === "dashboard" && (
-        <DashboardPage 
-          onNavigate={handleNavigate} 
-          currentUser={currentUser} 
-          onLogout={handleLogout} 
-        />
-      )}
-      
-      {currentPage === "report" && (
-        <ReportPage 
-          onNavigate={handleNavigate} 
-          currentUser={currentUser} 
-        />
-      )}
+      <AnimatePresence mode="wait">
+        {currentPage === "landing" && (
+          <motion.div key="landing" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+            <LandingPage 
+              onNavigate={handleNavigate} 
+              onLoginAsGuest={handleLoginAsGuest} 
+            />
+          </motion.div>
+        )}
+        
+        {currentPage === "login" && (
+          <motion.div key="login" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+            <LoginPage 
+              onLogin={handleLogin} 
+              onNavigate={handleNavigate} 
+              userEmail="sasankkonduru@gmail.com" 
+            />
+          </motion.div>
+        )}
+        
+        {currentPage === "dashboard" && (
+          <motion.div key="dashboard" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+            <DashboardPage 
+              onNavigate={handleNavigate} 
+              currentUser={currentUser} 
+              onLogout={handleLogout} 
+            />
+          </motion.div>
+        )}
+        
+        {currentPage === "report" && (
+          <motion.div key="report" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+            <ReportPage 
+              onNavigate={handleNavigate} 
+              currentUser={currentUser} 
+            />
+          </motion.div>
+        )}
 
-      {currentPage === "official" && (
-        <OfficialPage 
-          onNavigate={handleNavigate} 
-          currentUser={currentUser} 
-          onLogout={handleLogout}
-        />
-      )}
+        {currentPage === "official" && (
+          <motion.div key="official" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+            <OfficialPage 
+              onNavigate={handleNavigate} 
+              currentUser={currentUser} 
+              onLogout={handleLogout}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -18,7 +18,7 @@ export function Card({
     default: "bg-m3-surface-variant border-m3-outline text-slate-100",
     glass: "glass-card text-slate-100",
     bordered: "bg-transparent border-slate-900 text-slate-100",
-    interactive: "bg-m3-surface-variant/40 border-m3-outline text-slate-100 hover:bg-m3-surface-variant/75 hover:border-brand-primary/30 hover:-translate-y-1 shadow-md hover:shadow-xl hover:shadow-indigo-500/5",
+    interactive: "bg-m3-surface-variant/40 border-m3-outline text-slate-100 hover:bg-m3-surface-variant/75 hover:border-indigo-500/30 hover:-translate-y-1.5 shadow-md hover:shadow-[0_22px_45px_-15px_rgba(99,102,241,0.3)] transition-all duration-300 ease-out",
   };
 
   const glows = {
