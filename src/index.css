@@ -4,4 +4,128 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Material 3 & Premium Brand Colors */
+  --color-brand-primary: #6366f1; /* Indigo 500 */
+  --color-brand-primary-hover: #4f46e5; /* Indigo 600 */
+  --color-brand-secondary: #a855f7; /* Purple 500 */
+  --color-brand-tertiary: #06b6d4; /* Cyan 500 */
+  
+  --color-m3-surface: #0b0f19;
+  --color-m3-surface-variant: #161d2f;
+  --color-m3-outline: rgba(255, 255, 255, 0.08);
+  --color-m3-outline-high: rgba(255, 255, 255, 0.15);
+
+  /* Custom Color mapping for slate overrides */
+  --color-slate-955: #090d16;
+  --color-slate-905: #111827;
+  --color-slate-850: #1f2937;
+  
+  --color-status-critical: #ef4444; /* Red 500 */
+  --color-status-high: #f97316; /* Orange 500 */
+  --color-status-medium: #eab308; /* Yellow 500 */
+  --color-status-low: #22c55e; /* Green 500 */
 }
+
+/* Custom Base Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0b0f19;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+  border: 2px solid #0b0f19;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Premium Glassmorphic Classes */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-panel-hover:hover {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(99, 102, 241, 0.25);
+  box-shadow: 0 0 30px -5px rgba(99, 102, 241, 0.15);
+}
+
+.glass-card {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
+}
+
+.glass-input {
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f3f4f6;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.6);
+  background: rgba(15, 23, 42, 0.6);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.glow-indigo {
+  box-shadow: 0 0 40px -10px rgba(99, 102, 241, 0.25);
+}
+.glow-purple {
+  box-shadow: 0 0 40px -10px rgba(168, 85, 247, 0.25);
+}
+.glow-emerald {
+  box-shadow: 0 0 40px -10px rgba(16, 185, 129, 0.25);
+}
+
+/* Custom transitions and scrollbar overrides */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Premium Gemini AI Glow and Sparkle styling */
+.gemini-ai-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.02) 0%, rgba(168, 85, 247, 0.02) 100%), rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(168, 85, 247, 0.16);
+  box-shadow: 0 8px 32px 0 rgba(168, 85, 247, 0.03), inset 0 1px 1px 0 rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 1rem;
+}
+
+/* Smart City Command Grid overlay matching the Landing Page */
+.command-grid-bg {
+  background-image: 
+    linear-gradient(to right, rgba(99, 102, 241, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.02) 1px, transparent 1px);
+  background-size: 3rem 3rem;
+}
+
+/* Standardized scrollbar utility */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+

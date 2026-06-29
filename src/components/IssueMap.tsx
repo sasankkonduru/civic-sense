@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import { Locate, MapPin, AlertCircle, Calendar, ShieldAlert, Sparkles, Compass, Layers, Clock, Brain } from "lucide-react";
+import { Locate, MapPin, AlertCircle, Calendar, ShieldAlert, Sparkles, Compass, Layers, Clock, Brain, Building } from "lucide-react";
 import { Issue } from "../types";
+import { motion, useReducedMotion } from "motion/react";
 import "leaflet/dist/leaflet.css";
 
 // Pre-defined list of major Indian cities for instant offline lookup
 const CITIES = [
-  { name: "Hyderabad", lat: 17.3850, lng: 78.4867 },
+  { name: "Hyderabad", lat: 17.3850, lng: 78.4069 },
   { name: "Bengaluru", lat: 12.9716, lng: 77.5946 },
   { name: "Chennai", lat: 13.0827, lng: 80.2707 },
   { name: "Mumbai", lat: 19.0760, lng: 72.8777 },
@@ -26,7 +27,6 @@ const getNearestCity = (lat: number, lng: number): string => {
       closestCity = city.name;
     }
   });
-  // If we are within 1.5 degrees (~150km), return the city name
   if (minDistance < 1.5) {
     return closestCity;
   }
@@ -36,19 +36,34 @@ const getNearestCity = (lat: number, lng: number): string => {
 // Fix Leaflet marker icons default assets path issue by using custom SVG DivIcons
 const createCustomIcon = (severity: string) => {
   const colors = {
-    Critical: { bg: "#ef4444", border: "#b91c1c", pulse: "rgba(239, 68, 68, 0.4)" },
+    Critical: { bg: "#ef4444", border: "#991b1b", pulse: "rgba(239, 68, 68, 0.4)" },
     High: { bg: "#f97316", border: "#c2410c", pulse: "rgba(249, 115, 22, 0.4)" },
-    Medium: { bg: "#eab308", border: "#a16207", pulse: "rgba(234, 179, 8, 0.4)" },
-    Low: { bg: "#22c55e", border: "#15803d", pulse: "rgba(34, 197, 94, 0.4)" },
+    Medium: { bg: "#f59e0b", border: "#b45309", pulse: "rgba(245, 158, 11, 0.4)" },
+    Low: { bg: "#10b981", border: "#047857", pulse: "rgba(16, 185, 129, 0.4)" },
   };
 
   const current = colors[severity as keyof typeof colors] || colors.Medium;
 
   return L.divIcon({
     html: `
-      <div class="relative flex items-center justify-center w-8 h-8">
-        <div class="absolute w-6 h-6 rounded-full animate-ping opacity-75" style="background-color: ${current.pulse};"></div>
-        <div class="relative w-5 h-5 rounded-full border-2 flex items-center justify-center shadow-md transition-all hover:scale-110" 
+      <style>
+        @keyframes subtleMarkerFloat {
+          0% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-3.5px) scale(1.04); }
+          100% { transform: translateY(0px) scale(1); }
+        }
+        .custom-map-marker-float {
+          animation: subtleMarkerFloat 3.5s ease-in-out infinite;
+        }
+        .custom-leaflet-marker:hover .relative-dot {
+          transform: scale(1.25) translateY(-2px) !important;
+          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4), 0 0 15px ${current.bg} !important;
+          filter: brightness(1.1);
+        }
+      </style>
+      <div class="relative flex items-center justify-center w-8 h-8 custom-map-marker-float">
+        <div class="absolute w-6 h-6 rounded-full animate-ping opacity-60" style="background-color: ${current.pulse};"></div>
+        <div class="relative-dot relative w-5 h-5 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ease-out" 
              style="background-color: ${current.bg}; border-color: ${current.border};">
           <div class="w-1.5 h-1.5 bg-white rounded-full"></div>
         </div>
@@ -64,19 +79,19 @@ const createCustomIcon = (severity: string) => {
 // Custom Icon for marker clustering with dynamic severity color coding
 const createClusterIcon = (count: number, highestSeverity: string) => {
   const colors = {
-    Critical: { bg: "#ef4444", border: "#b91c1c", pulse: "rgba(239, 68, 68, 0.4)" },
+    Critical: { bg: "#ef4444", border: "#991b1b", pulse: "rgba(239, 68, 68, 0.4)" },
     High: { bg: "#f97316", border: "#c2410c", pulse: "rgba(249, 115, 22, 0.4)" },
-    Medium: { bg: "#eab308", border: "#a16207", pulse: "rgba(234, 179, 8, 0.4)" },
-    Low: { bg: "#22c55e", border: "#15803d", pulse: "rgba(34, 197, 94, 0.4)" },
+    Medium: { bg: "#f59e0b", border: "#b45309", pulse: "rgba(245, 158, 11, 0.4)" },
+    Low: { bg: "#10b981", border: "#047857", pulse: "rgba(16, 185, 129, 0.4)" },
   };
 
   const current = colors[highestSeverity as keyof typeof colors] || colors.Medium;
 
   return L.divIcon({
     html: `
-      <div class="relative flex items-center justify-center w-10 h-10">
-        <div class="absolute w-8 h-8 rounded-full animate-ping opacity-60" style="background-color: ${current.pulse};"></div>
-        <div class="relative w-7 h-7 rounded-full border-2 flex items-center justify-center shadow-lg transition-all hover:scale-110"
+      <div class="relative flex items-center justify-center w-10 h-10 custom-map-marker-float">
+        <div class="absolute w-8 h-8 rounded-full animate-ping opacity-50" style="background-color: ${current.pulse};"></div>
+        <div class="relative w-7 h-7 rounded-full border-2 flex items-center justify-center shadow-xl transition-all hover:scale-115 duration-200"
              style="background-color: ${current.bg}; border-color: ${current.border}; color: white; font-weight: 900; font-family: sans-serif; font-size: 11px;">
           ${count}
         </div>
@@ -129,6 +144,100 @@ const MapEventsHandler: React.FC<MapEventsHandlerProps> = ({ onCenterChange, onZ
   return null;
 };
 
+// Custom Floating Controls Component for Map zoom, locate, and fullscreen toggles
+interface CustomMapControlsProps {
+  onLocate: () => void;
+  isLocating: boolean;
+}
+
+const CustomMapControls: React.FC<CustomMapControlsProps> = ({ onLocate, isLocating }) => {
+  const map = useMap();
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const handleZoomIn = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    map.zoomIn();
+  };
+
+  const handleZoomOut = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    map.zoomOut();
+  };
+
+  const handleFullscreenToggle = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const element = document.getElementById("leaflet-map-wrapper");
+    if (!element) return;
+
+    if (!document.fullscreenElement) {
+      element.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch(err => {
+        console.error("Failed to enter fullscreen mode:", err);
+      });
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFSChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFSChange);
+    return () => document.removeEventListener("fullscreenchange", handleFSChange);
+  }, []);
+
+  return (
+    <div className="absolute bottom-3 right-3 z-[500] flex flex-col gap-2 pointer-events-auto">
+      {/* Zoom In */}
+      <button
+        onClick={handleZoomIn}
+        title="Zoom In"
+        className="flex items-center justify-center w-9 h-9 bg-slate-950/90 backdrop-blur-md hover:bg-slate-900 border border-indigo-500/30 rounded-xl shadow-xl transition-all text-white hover:text-sky-400 font-black cursor-pointer text-lg leading-none"
+      >
+        +
+      </button>
+
+      {/* Zoom Out */}
+      <button
+        onClick={handleZoomOut}
+        title="Zoom Out"
+        className="flex items-center justify-center w-9 h-9 bg-slate-950/90 backdrop-blur-md hover:bg-slate-900 border border-indigo-500/30 rounded-xl shadow-xl transition-all text-white hover:text-sky-400 font-black cursor-pointer text-lg leading-none"
+      >
+        -
+      </button>
+
+      {/* GPS Locate User */}
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onLocate();
+        }}
+        disabled={isLocating}
+        title="Recenter on my location"
+        className="flex items-center justify-center w-9 h-9 bg-slate-950/90 backdrop-blur-md hover:bg-slate-900 border border-indigo-500/30 rounded-xl shadow-xl transition-all text-white hover:text-sky-400 disabled:opacity-50 cursor-pointer"
+      >
+        <Locate className={`w-4 h-4 ${isLocating ? "animate-spin text-indigo-500" : ""}`} />
+      </button>
+
+      {/* Fullscreen Toggle */}
+      <button
+        onClick={handleFullscreenToggle}
+        title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Mode"}
+        className="flex items-center justify-center w-9 h-9 bg-slate-950/90 backdrop-blur-md hover:bg-slate-900 border border-indigo-500/30 rounded-xl shadow-xl transition-all text-white hover:text-sky-400 cursor-pointer text-[10px] font-bold font-mono"
+      >
+        {isFullscreen ? "EXIT" : "FULL"}
+      </button>
+    </div>
+  );
+};
+
 interface MapCluster {
   id: string;
   latitude: number;
@@ -140,15 +249,40 @@ interface IssueMapProps {
   issues: Issue[];
   onSelectIssue?: (issue: Issue) => void;
   selectedIssueId?: string;
+  hideMonitorPanel?: boolean;
 }
 
 export const IssueMap: React.FC<IssueMapProps> = ({
   issues,
   onSelectIssue,
   selectedIssueId,
+  hideMonitorPanel = false,
 }) => {
-  const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]); // Default India
-  const [mapZoom, setMapZoom] = useState<number>(5); // Default wide view for India
+  const shouldReduceMotion = useReducedMotion();
+  // Filter issues that have valid coordinates
+  const geocodedIssues = issues.filter(
+    (issue) => typeof issue.latitude === "number" && typeof issue.longitude === "number"
+  );
+
+  const [mapCenter, setMapCenter] = useState<[number, number]>(() => {
+    if (selectedIssueId) {
+      const selected = issues.find((issue) => issue.id === selectedIssueId);
+      if (selected && typeof selected.latitude === "number" && typeof selected.longitude === "number") {
+        return [selected.latitude, selected.longitude];
+      }
+    }
+    if (geocodedIssues.length > 0) {
+      return [geocodedIssues[0].latitude!, geocodedIssues[0].longitude!];
+    }
+    return [17.3850, 78.4069]; // Default Hyderabad
+  });
+
+  const [mapZoom, setMapZoom] = useState<number>(() => {
+    if (selectedIssueId) return 15;
+    if (geocodedIssues.length > 0) return 13;
+    return 12; // Configured city level zoom
+  });
+
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [locateError, setLocateError] = useState<string | null>(null);
@@ -156,16 +290,9 @@ export const IssueMap: React.FC<IssueMapProps> = ({
   const [geocodedCity, setGeocodedCity] = useState<string>("");
   const [localNearestCity, setLocalNearestCity] = useState<string>("");
 
-  // Filter issues that have valid coordinates
-  const geocodedIssues = issues.filter(
-    (issue) => typeof issue.latitude === "number" && typeof issue.longitude === "number"
-  );
-
-  // High-performance dynamic grid-based clustering logic
+  // Dynamic grid clustering
   const clusterIssues = (issuesList: Issue[], zoom: number): MapCluster[] => {
     const clusters: MapCluster[] = [];
-    
-    // Zoom levels >= 14 de-clusters and shows exact markers
     if (zoom >= 14) {
       return issuesList.map(issue => ({
         id: `single-${issue.id}`,
@@ -175,8 +302,7 @@ export const IssueMap: React.FC<IssueMapProps> = ({
       }));
     }
 
-    // Dynamic clustering radius in degrees, scales exponentially with zoom
-    const radius = 1.2 / Math.pow(1.8, zoom - 5);
+    const radius = 1.6 / Math.pow(1.8, zoom - 5);
 
     issuesList.forEach((issue) => {
       const lat = issue.latitude!;
@@ -209,12 +335,10 @@ export const IssueMap: React.FC<IssueMapProps> = ({
 
   const clusters = clusterIssues(geocodedIssues, mapZoom);
 
-  // Detect user current location with graceful fallback to India center
+  // Detect user current location
   const handleLocateUser = () => {
     if (!navigator.geolocation) {
-      setLocateError("Geolocation is not supported by your browser. Centered on India.");
-      setMapCenter([20.5937, 78.9629]);
-      setMapZoom(5);
+      setLocateError("Geolocation is not supported by your browser. Centered on default view.");
       return;
     }
 
@@ -226,24 +350,21 @@ export const IssueMap: React.FC<IssueMapProps> = ({
         const coords: [number, number] = [position.coords.latitude, position.coords.longitude];
         setUserLocation(coords);
         setMapCenter(coords);
-        setMapZoom(13); // Zoom in on user location
+        setMapZoom(13);
         setIsLocating(false);
       },
       (error) => {
         console.error("Error getting location:", error);
-        let msg = "Location permission denied. Centered on Indian National Grid.";
-        setLocateError(msg);
-        setMapCenter([20.5937, 78.9629]);
-        setMapZoom(5);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocateError("Location access is optional. Centered on default city view.");
+        } else {
+          setLocateError("Could not retrieve your location. Centered on default city view.");
+        }
         setIsLocating(false);
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
   };
-
-  useEffect(() => {
-    handleLocateUser();
-  }, []);
 
   // Recenter map when selectedIssueId changes
   useEffect(() => {
@@ -251,7 +372,7 @@ export const IssueMap: React.FC<IssueMapProps> = ({
       const selected = geocodedIssues.find((issue) => issue.id === selectedIssueId);
       if (selected && typeof selected.latitude === "number" && typeof selected.longitude === "number") {
         setMapCenter([selected.latitude, selected.longitude]);
-        setMapZoom(15); // Zoom in close to selected issue
+        setMapZoom(15);
       }
     }
   }, [selectedIssueId, issues]);
@@ -283,11 +404,9 @@ export const IssueMap: React.FC<IssueMapProps> = ({
     const lat = mapCenter[0];
     const lng = mapCenter[1];
 
-    // Instantly calculate nearest city offline fallback
     const localCity = getNearestCity(lat, lng);
     setLocalNearestCity(localCity);
 
-    // Debounce live reverse geocode fetch to prevent server rate limiting
     const timeoutId = setTimeout(() => {
       fetchCityName(lat, lng);
     }, 800);
@@ -296,63 +415,117 @@ export const IssueMap: React.FC<IssueMapProps> = ({
   }, [mapCenter]);
 
   return (
-    <div className="relative w-full h-full min-h-[350px] bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 shadow-inner group" id="leaflet-map-wrapper">
+    <div className="relative w-full h-full min-h-[350px] bg-slate-950 rounded-3xl overflow-hidden border border-slate-900 shadow-inner group animate-none" id="leaflet-map-wrapper">
       
       {/* Top Left Floating Indicator (City Name & Active Count) */}
-      <div className="absolute top-3 left-3 z-[500] pointer-events-none flex flex-col gap-2 max-w-[280px] sm:max-w-[340px]">
-        <div className="pointer-events-auto bg-slate-950/85 backdrop-blur-md border border-indigo-500/30 rounded-2xl p-3 shadow-xl flex items-center space-x-3 text-white transition-all duration-300 hover:border-indigo-400/50">
-          <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center shrink-0">
-            <Compass className="w-4.5 h-4.5 text-sky-400 animate-pulse" />
+      {!hideMonitorPanel && (
+        <motion.div 
+          initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -10, y: -10 }}
+          animate={{ opacity: 1, x: 0, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="absolute top-3 left-3 z-[500] flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-[calc(100%-24px)] pointer-events-none"
+        >
+          <div className="pointer-events-auto bg-slate-950/90 backdrop-blur-md border border-indigo-500/30 rounded-2xl p-3 shadow-xl flex flex-col gap-2.5 text-white transition-all duration-300 hover:border-indigo-400/50">
+            <div className="flex items-center space-x-3 border-b border-slate-900/60 pb-2">
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center shrink-0">
+                <Compass className="w-4.5 h-4.5 text-sky-400 animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0 pr-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9px] font-bold text-indigo-305 uppercase tracking-widest leading-none">
+                    MUNICIPAL MONITOR
+                  </span>
+                  <span className="text-[8px] px-1.5 py-0.5 rounded font-mono font-bold leading-none bg-slate-900 border border-slate-800 text-slate-400">
+                    {userLocation ? "📍 Current Location" : "🏢 Default City"}
+                  </span>
+                </div>
+                <h4 className="text-xs font-extrabold text-white truncate mt-1">
+                  {geocodedCity || localNearestCity ? (
+                    <>Viewing <span className="text-sky-400">{geocodedCity || localNearestCity}</span></>
+                  ) : (
+                    "Indian National Grid"
+                  )}
+                </h4>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-bold font-sans">
+              <div className="px-2 py-1 rounded bg-slate-900/60 border border-slate-850 flex flex-col justify-center min-w-[55px]">
+                <span className="text-xs text-white font-mono font-black">
+                  {issues.filter(i => i.status !== "Verified & Closed" && i.status !== "Closed").length}
+                </span>
+                <span className="text-[7.5px] text-slate-400 uppercase tracking-wider font-mono">Active</span>
+              </div>
+              <div className="px-2 py-1 rounded bg-emerald-950/20 border border-emerald-900/20 flex flex-col justify-center min-w-[55px]">
+                <span className="text-xs text-emerald-400 font-mono font-black">
+                  {issues.filter(i => i.status === "Resolved" || i.status === "Verified & Closed" || i.status === "Closed").length}
+                </span>
+                <span className="text-[7.5px] text-emerald-500 uppercase tracking-wider font-mono">Resolved</span>
+              </div>
+              <div className="px-2 py-1 rounded bg-purple-950/20 border border-purple-900/20 flex flex-col justify-center min-w-[55px]">
+                <span className="text-xs text-purple-400 font-mono font-black">
+                  {issues.filter(i => i.status === "Resolved" && !i.resolutionVerification).length}
+                </span>
+                <span className="text-[7.5px] text-purple-500 uppercase tracking-wider font-mono">Audit</span>
+              </div>
+              <div className="px-2 py-1 rounded bg-red-950/20 border border-red-900/20 flex flex-col justify-center min-w-[55px]">
+                <span className="text-xs text-red-400 font-mono font-black">
+                  {issues.filter(i => i.severity === "Critical" || i.severity === "High").length}
+                </span>
+                <span className="text-[7.5px] text-red-500 uppercase tracking-wider font-mono">Priority</span>
+              </div>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest leading-none">
-              MUNICIPAL MONITOR
-            </p>
-            <h4 className="text-xs font-extrabold text-white truncate mt-1">
-              {geocodedCity || localNearestCity ? (
-                <>Viewing <span className="text-sky-400">{geocodedCity || localNearestCity}</span></>
-              ) : (
-                "Indian National Grid"
-              )}
-            </h4>
-          </div>
-          <div className="px-2.5 py-1 rounded-xl bg-indigo-500/20 border border-indigo-500/35 flex flex-col items-center justify-center shrink-0">
-            <span className="text-[12px] font-black text-white leading-none">
-              {geocodedIssues.length}
-            </span>
-            <span className="text-[7px] font-bold text-indigo-300 uppercase mt-0.5 tracking-wider">
-              Hazards
-            </span>
-          </div>
-        </div>
-      </div>
 
-      {/* Bottom Left Floating Legend */}
-      <div className="absolute bottom-3 left-3 z-[500] pointer-events-none">
+          {!userLocation && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleLocateUser();
+              }}
+              disabled={isLocating}
+              className="pointer-events-auto flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-650/90 hover:bg-indigo-700 text-white rounded-2xl text-[10.5px] font-bold shadow-xl border border-indigo-550/20 hover:border-indigo-400/40 active:scale-95 transition-all cursor-pointer h-full self-start sm:self-auto font-sans"
+            >
+              <Locate className={`w-3.5 h-3.5 ${isLocating ? "animate-spin text-indigo-350" : ""}`} />
+              <span>{isLocating ? "Locating..." : "Use My Location"}</span>
+            </button>
+          )}
+        </motion.div>
+      )}
+
+      {/* Bottom Left Floating Legend (Critical Red, High Orange, Medium Yellow, Low Green) */}
+      <motion.div 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -10, y: 10 }}
+        animate={{ opacity: 1, x: 0, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut", delay: 0.1 }}
+        className="absolute bottom-3 left-3 z-[500] pointer-events-none"
+      >
         <div className="pointer-events-auto bg-slate-950/85 backdrop-blur-md border border-indigo-500/20 rounded-xl p-3 shadow-lg text-white space-y-1.5 min-w-[120px]">
-          <p className="text-[8px] font-extrabold text-indigo-300 uppercase tracking-widest">
+          <p className="text-[8px] font-extrabold text-indigo-300 uppercase tracking-widest font-mono">
             SEVERITY SCALE
           </p>
           <div className="space-y-1">
             {[
               { label: "Critical", color: "bg-red-500", border: "border-red-400" },
               { label: "High", color: "bg-orange-500", border: "border-orange-400" },
-              { label: "Medium", color: "bg-amber-500", border: "border-amber-400" },
+              { label: "Medium", color: "bg-yellow-500", border: "border-yellow-400" },
               { label: "Low", color: "bg-emerald-500", border: "border-emerald-400" },
             ].map((item) => (
-              <div key={item.label} className="flex items-center space-x-2 text-[10px] font-semibold text-slate-200">
-                <span className={`w-2 h-2 rounded-full ${item.color} border ${item.border} shrink-0`} />
+              <div key={item.label} className="flex items-center space-x-2 text-[10px] font-bold text-slate-200">
+                <span className={`w-2.5 h-2.5 rounded-full ${item.color} border ${item.border} shrink-0`} />
                 <span>{item.label}</span>
               </div>
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       <MapContainer
         center={mapCenter}
         zoom={mapZoom}
         scrollWheelZoom={true}
+        zoomControl={false}
         style={{ width: "100%", height: "100%", zIndex: 1 }}
       >
         <TileLayer
@@ -360,14 +533,18 @@ export const IssueMap: React.FC<IssueMapProps> = ({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {/* Sync Center programmatically */}
         <MapRecenter center={mapCenter} zoom={mapZoom} />
 
-        {/* Track center & zoom changes from user panning */}
         <MapEventsHandler 
           onCenterChange={(center) => setMapCenter(center)}
           onZoomChange={(zoom) => setMapZoom(zoom)}
           currentCenter={mapCenter}
+        />
+
+        {/* Custom floating map controls */}
+        <CustomMapControls 
+          onLocate={handleLocateUser}
+          isLocating={isLocating}
         />
 
         {/* User Current Location Indicator */}
@@ -413,7 +590,20 @@ export const IssueMap: React.FC<IssueMapProps> = ({
                 }}
               >
                 <Popup maxWidth={280} minWidth={220}>
-                  <div className="p-1 space-y-2 text-slate-800">
+                  <div className="p-1.5 space-y-2 text-slate-800 font-sans">
+                    
+                    {/* Defect image thumbnail */}
+                    {issue.imageUrl && (
+                      <div className="w-full h-24 rounded-lg overflow-hidden border border-slate-100 bg-slate-50 relative">
+                        <img 
+                          src={issue.imageUrl} 
+                          alt={issue.title} 
+                          className="w-full h-full object-cover" 
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
                       <span className="font-mono text-[9px] font-bold text-slate-500 uppercase tracking-wide">
                         {issue.category}
@@ -425,7 +615,7 @@ export const IssueMap: React.FC<IssueMapProps> = ({
                             : issue.severity === "High"
                             ? "bg-orange-50 border-orange-200 text-orange-600"
                             : issue.severity === "Medium"
-                            ? "bg-yellow-50 border-yellow-200 text-yellow-700"
+                            ? "bg-yellow-55 border-yellow-200 text-yellow-700"
                             : "bg-green-50 border-green-200 text-green-600"
                         }`}
                       >
@@ -437,40 +627,54 @@ export const IssueMap: React.FC<IssueMapProps> = ({
                       {issue.title}
                     </h4>
 
-                    {issue.description && (
-                      <p className="text-[11px] text-slate-600 line-clamp-3 leading-normal font-medium font-sans bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        {issue.description}
-                      </p>
-                    )}
+                    {/* Status Badge */}
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wide font-mono">Status:</span>
+                      <span className={`text-[8.5px] px-1.5 py-0.2 rounded-full font-bold uppercase ${
+                        issue.status === "Resolved" || issue.status === "Verified & Closed" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                        issue.status === "In Progress" ? "bg-orange-50 text-orange-700 border border-orange-100" :
+                        "bg-slate-50 text-slate-700 border border-slate-100"
+                      }`}>
+                        {issue.status}
+                      </span>
+                    </div>
 
-                    <div className="space-y-1 pt-1 text-[10px] text-slate-500 font-semibold">
+                    {/* Priority metrics */}
+                    <div className="space-y-1 pt-1 text-[10px] text-slate-500 font-semibold border-t border-slate-100/60 font-sans">
                       {issue.priorityScore !== undefined ? (
-                        <div className="flex items-center gap-1 text-indigo-600">
-                          <ShieldAlert className="w-3 h-3 text-indigo-500" />
-                          <span>AI Priority: <span className="font-extrabold text-indigo-700">{issue.priorityLevel} ({issue.priorityScore}/100)</span></span>
+                        <div className="flex items-center gap-1 text-indigo-650">
+                          <Brain className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>AI Priority: <span className="font-extrabold text-indigo-700">{issue.priorityLevel} (P{issue.priorityScore})</span></span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
-                          <ShieldAlert className="w-3 h-3 text-slate-400" />
-                          <span>Priority Level: <span className="font-bold text-slate-700">{issue.priority}</span></span>
+                          <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Priority Code: <span className="font-bold text-slate-700">{issue.priority}</span></span>
                         </div>
                       )}
-                      {issue.supportCount !== undefined && issue.supportCount > 0 && (
-                        <div className="flex items-center gap-1 text-emerald-600">
-                          <Sparkles className="w-3 h-3 text-emerald-500 animate-pulse" />
-                          <span>Support Count: {issue.supportCount} citizens</span>
-                        </div>
-                      )}
+
+                      {/* Reported date */}
                       <div className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-slate-400" />
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
                         <span>
                           Reported:{" "}
-                          <span className="font-extrabold text-slate-700">
+                          <span className="font-bold text-slate-705">
                             {new Date(issue.createdAt).toLocaleDateString(undefined, {
                               month: "short",
                               day: "numeric",
-                              year: "numeric",
+                              year: "numeric"
                             })}
+                          </span>
+                        </span>
+                      </div>
+
+                      {/* Assigned department */}
+                      <div className="flex items-center gap-1">
+                        <Building className="w-3.5 h-3.5 text-slate-400" />
+                        <span>
+                          Dept:{" "}
+                          <span className="font-bold text-slate-705">
+                            {issue.department || "Triage Desk"}
                           </span>
                         </span>
                       </div>
@@ -481,7 +685,7 @@ export const IssueMap: React.FC<IssueMapProps> = ({
                         onClick={() => onSelectIssue(issue)}
                         className="w-full mt-2 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-extrabold text-[10px] py-1.5 px-3 rounded-xl shadow-md shadow-indigo-500/10 transition-all flex items-center justify-center gap-1 cursor-pointer"
                       >
-                        <Brain className="w-3 h-3" />
+                        <Brain className="w-3.5 h-3.5" />
                         <span>Inspect Intelligence Details</span>
                       </button>
                     )}
@@ -518,10 +722,10 @@ export const IssueMap: React.FC<IssueMapProps> = ({
                     <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1 font-mono">
                         <Layers className="w-3 h-3 text-indigo-500" />
-                        Hazard Cluster
+                        Issue Cluster
                       </span>
                       <span className="text-[10px] font-black text-indigo-600 bg-indigo-50/80 px-2 py-0.5 rounded-full border border-indigo-100">
-                        {cluster.issues.length} Hazards
+                        {cluster.issues.length} Issues
                       </span>
                     </div>
                     
@@ -567,19 +771,7 @@ export const IssueMap: React.FC<IssueMapProps> = ({
         })}
       </MapContainer>
 
-      {/* Recenter & Geolocation Buttons */}
-      <div className="absolute bottom-3 right-3 z-[500] flex flex-col gap-2">
-        <button
-          onClick={handleLocateUser}
-          disabled={isLocating}
-          title="Recenter on my location"
-          className="flex items-center justify-center w-9 h-9 bg-slate-950/85 backdrop-blur-md hover:bg-slate-900 border border-indigo-500/30 rounded-xl shadow-xl transition-all text-white hover:text-sky-400 disabled:opacity-50 pointer-events-auto cursor-pointer"
-        >
-          <Locate className={`w-4 h-4 ${isLocating ? "animate-spin text-indigo-500" : ""}`} />
-        </button>
-      </div>
-
-      {/* Toast alert for geo error */}
+      {/* Locate Error Toast */}
       {locateError && (
         <div className="absolute top-3 left-3 right-3 z-[500] bg-rose-950/90 backdrop-blur-md border border-rose-500/30 text-rose-200 rounded-xl px-3 py-2.5 text-[10px] font-bold shadow-xl flex items-center gap-2 animate-fade-in pointer-events-auto">
           <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />

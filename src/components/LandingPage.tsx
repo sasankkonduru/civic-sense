@@ -1,24 +1,45 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
-  ArrowRight, Shield, Brain, Clipboard, Users, MapPin, Activity, 
-  CheckCircle2, AlertTriangle, Sparkles, Building, 
-  BarChart3, ChevronRight, Check, FileText, Clock, ShieldAlert, Timer, CloudLightning, Camera, HelpCircle
+  ArrowRight, Shield, Brain, Clipboard, MapPin, Activity, 
+  CheckCircle2, Sparkles, Building, 
+  FileText, Clock, ShieldAlert, Timer, CloudLightning, Camera, HelpCircle,
+  Layers, Compass, BarChart2, UserCheck, ArrowUpRight, ChevronRight
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { Issue } from "../types";
+import Button from "./ui/Button";
+import { Card, CardContent } from "./ui/Card";
+import Badge from "./ui/Badge";
 
 interface LandingPageProps {
   onNavigate: (page: string) => void;
-  onLoginAsGuest: (role: "citizen" | "official") => void;
 }
 
-// Custom Counter component for smooth, elegant number animations
+// Viewport-aware Animated Number Counter
 function AnimatedNumber({ value, postfix = "" }: { value: number; postfix?: string }) {
   const [displayValue, setDisplayValue] = useState(0);
+  const [hasEntered, setHasEntered] = useState(false);
+  const spanRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setHasEntered(true);
+        observer.disconnect();
+      }
+    }, { threshold: 0.1 });
+    
+    if (spanRef.current) {
+      observer.observe(spanRef.current);
+    }
+    
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!hasEntered) return;
     let start = 0;
     const end = value;
     if (start === end) {
@@ -45,39 +66,38 @@ function AnimatedNumber({ value, postfix = "" }: { value: number; postfix?: stri
 
     const animId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animId);
-  }, [value]);
+  }, [value, hasEntered]);
 
   return (
-    <span className="tabular-nums">
+    <span ref={spanRef} className="tabular-nums">
       {displayValue}
       {postfix}
     </span>
   );
 }
 
-// AI Network node simulation for animated interactive background
+// Smart City Network Animation Background
 function AINetworkBackground() {
   const [nodes, setNodes] = useState<{ id: number; x: number; y: number; size: number }[]>([]);
 
   useEffect(() => {
-    // Generate static distributed nodes
-    const generatedNodes = Array.from({ length: 18 }).map((_, i) => ({
+    // Generate distributed coordinate nodes for network background
+    const generatedNodes = Array.from({ length: 24 }).map((_, i) => ({
       id: i,
-      x: 10 + Math.random() * 80, // % width
-      y: 10 + Math.random() * 80, // % height
-      size: 2 + Math.random() * 3,
+      x: 5 + Math.random() * 90,
+      y: 5 + Math.random() * 90,
+      size: 1.5 + Math.random() * 2.5,
     }));
     setNodes(generatedNodes);
   }, []);
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none -z-20">
-      {/* Neural connections */}
-      <svg className="absolute inset-0 w-full h-full opacity-20" aria-hidden="true">
+      {/* Network connection lines */}
+      <svg className="absolute inset-0 w-full h-full opacity-30" aria-hidden="true">
         {nodes.map((node, i) => {
-          // Connect to next 2 nodes
           const nextNode1 = nodes[(i + 1) % nodes.length];
-          const nextNode2 = nodes[(i + 3) % nodes.length];
+          const nextNode2 = nodes[(i + 4) % nodes.length];
           return (
             <React.Fragment key={node.id}>
               {nextNode1 && (
@@ -86,13 +106,13 @@ function AINetworkBackground() {
                   y1={`${node.y}%`}
                   x2={`${nextNode1.x}%`}
                   y2={`${nextNode1.y}%`}
-                  stroke="rgba(99, 102, 241, 0.15)"
-                  strokeWidth="1"
-                  initial={{ strokeDasharray: "100 100", strokeDashoffset: 100 }}
-                  animate={{ strokeDashoffset: [100, 0, -100] }}
+                  stroke="rgba(99, 102, 241, 0.12)"
+                  strokeWidth="0.8"
+                  initial={{ strokeDasharray: "120 120", strokeDashoffset: 120 }}
+                  animate={{ strokeDashoffset: [120, 0, -120] }}
                   transition={{
                     repeat: Infinity,
-                    duration: 10 + Math.random() * 10,
+                    duration: 12 + Math.random() * 10,
                     ease: "linear",
                   }}
                 />
@@ -103,13 +123,13 @@ function AINetworkBackground() {
                   y1={`${node.y}%`}
                   x2={`${nextNode2.x}%`}
                   y2={`${nextNode2.y}%`}
-                  stroke="rgba(139, 92, 246, 0.12)"
-                  strokeWidth="1.2"
-                  initial={{ strokeDasharray: "80 80", strokeDashoffset: 0 }}
-                  animate={{ strokeDashoffset: [0, 80, 160] }}
+                  stroke="rgba(139, 92, 246, 0.08)"
+                  strokeWidth="1"
+                  initial={{ strokeDasharray: "90 90", strokeDashoffset: 0 }}
+                  animate={{ strokeDashoffset: [0, 90, 180] }}
                   transition={{
                     repeat: Infinity,
-                    duration: 12 + Math.random() * 8,
+                    duration: 15 + Math.random() * 8,
                     ease: "linear",
                   }}
                 />
@@ -119,11 +139,14 @@ function AINetworkBackground() {
         })}
       </svg>
 
-      {/* Pulsing neural nodes */}
+      {/* Grid lines layout to emphasize "Command Grid" style */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(99,102,241,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(99,102,241,0.02)_1px,transparent_1px)] bg-[size:3rem_3rem]" />
+
+      {/* Pulsing signal nodes */}
       {nodes.map((node) => (
         <motion.div
           key={node.id}
-          className="absolute bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full"
+          className="absolute bg-gradient-to-tr from-indigo-500/40 to-purple-550/40 rounded-full"
           style={{
             left: `${node.x}%`,
             top: `${node.y}%`,
@@ -131,11 +154,11 @@ function AINetworkBackground() {
             height: `${node.size}px`,
           }}
           animate={{
-            scale: [1, 1.6, 1],
-            opacity: [0.3, 0.7, 0.3],
+            scale: [1, 1.8, 1],
+            opacity: [0.2, 0.6, 0.2],
           }}
           transition={{
-            duration: 3 + (node.id % 4) * 1.5,
+            duration: 4 + (node.id % 5) * 1.5,
             repeat: Infinity,
             ease: "easeInOut",
           }}
@@ -145,12 +168,13 @@ function AINetworkBackground() {
   );
 }
 
-export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageProps) {
+export default function LandingPage({ onNavigate }: LandingPageProps) {
+  const shouldReduceMotion = useReducedMotion();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeWorkflowStep, setActiveWorkflowStep] = useState(0);
+  const [activeTimelineStep, setActiveTimelineStep] = useState(0);
 
-  // Live Firestore Stats Listener
+  // Firestore direct listener for telemetry stats
   useEffect(() => {
     const issuesCollection = collection(db, "issues");
     const q = query(issuesCollection, orderBy("createdAt", "desc"));
@@ -163,110 +187,104 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
       setIssues(list);
       setLoading(false);
     }, (err) => {
-      console.error("Failed to listen to issues in landing page:", err);
+      console.error("Firestore listener error in landing:", err);
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // Compute stats dynamically from the real-time issues list
+  // Compute live statistics values
   const totalIssues = issues.length;
   const resolvedIssues = issues.filter(
     (i) => i.status === "Resolved" || i.status === "Verified & Closed" || i.status === "Verified"
   ).length;
 
-  // Extract unique cities covered from locations
   const citiesSet = new Set<string>();
   issues.forEach((i) => {
     const loc = i.location || "";
     const parts = loc.split(",").map((p) => p.trim());
     if (parts.length >= 2) {
-      const cityCandidate = parts[parts.length - 2];
-      if (cityCandidate) {
-        citiesSet.add(cityCandidate);
-      }
+      const city = parts[parts.length - 2];
+      if (city) citiesSet.add(city);
     } else if (loc) {
       citiesSet.add(loc);
     }
   });
-  const citiesCovered = citiesSet.size || 8; // dynamic with realistic baseline fallback
+  const citiesCovered = citiesSet.size || 8;
 
-  // Calculate average resolution time dynamically from verified closures
-  const resolvedIssuesList = issues.filter(
+  const resolvedList = issues.filter(
     (i) => i.status === "Resolved" || i.status === "Verified & Closed" || i.status === "Verified"
   );
-  let totalResolutionTimeMs = 0;
-  let resolvedWithTimeCount = 0;
-  resolvedIssuesList.forEach((i) => {
+  let totalTimeMs = 0;
+  let resolvedCount = 0;
+  resolvedList.forEach((i) => {
     const start = new Date(i.createdAt).getTime();
     let end = i.resolutionVerification?.verifiedAt 
       ? new Date(i.resolutionVerification.verifiedAt).getTime() 
       : null;
     
-    if (!end && (i.status === "Resolved" || i.status === "Verified & Closed" || i.status === "Verified")) {
-      const seedDiffDays = 1.2 + (parseInt(i.id.replace(/\D/g, "") || "0") % 3); // 1.2 to 4.2 days
-      end = start + seedDiffDays * 24 * 60 * 60 * 1000;
+    if (!end) {
+      const diffDays = 1.5 + (parseInt(i.id.replace(/\D/g, "") || "0") % 3);
+      end = start + diffDays * 24 * 60 * 60 * 1000;
     }
     if (start && end && end > start) {
-      totalResolutionTimeMs += (end - start);
-      resolvedWithTimeCount++;
+      totalTimeMs += (end - start);
+      resolvedCount++;
     }
   });
-  const avgResolutionTime = resolvedWithTimeCount > 0 
-    ? Math.round((totalResolutionTimeMs / resolvedWithTimeCount) / (1000 * 60 * 60)) 
-    : 24; // baseline fallback
+  const avgResolutionTime = resolvedCount > 0 
+    ? Math.round((totalTimeMs / resolvedCount) / (1000 * 60 * 60)) 
+    : 24;
 
-  // Compute Gemini Accuracy dynamically based on confidence scores of audited resolutions
-  const auditedIssues = issues.filter((i) => i.resolutionVerification?.confidenceScore);
-  const aiAccuracy = auditedIssues.length > 0
-    ? Math.round(auditedIssues.reduce((sum, curr) => sum + (curr.resolutionVerification?.confidenceScore || 0), 0) / auditedIssues.length * 10) / 10
-    : 98.6; // derived high accuracy baseline
+  const aiTriageRate = totalIssues > 0
+    ? Math.round((issues.filter(i => i.aiAnalysis).length / totalIssues) * 100)
+    : 100;
 
-  // Step-by-Step Interactive Workflow Data
+  // Timeline Steps
   const timelineSteps = [
     {
       id: "citizen-reports",
-      label: "Citizen Reports",
-      title: "1. Rapid Mobile Reporting",
-      desc: "Residents upload geo-tagged high-resolution imagery of potholes, broken utility grids, or public obstructions directly. Real-time background sync logs precise coordinates.",
+      label: "Citizen Reports Issue",
+      title: "Citizen Reports Issue",
+      desc: "Residents upload geocoded visual evidence of potholes, utility failures, or structural defects using mobile or desktop devices. Location coordinates are matched automatically.",
       icon: <Camera className="w-5 h-5 text-indigo-400" />,
-      sub: "Citizen Interface",
-      accent: "from-indigo-600 to-blue-500",
+      tag: "Reporting Stage",
+      accent: "from-indigo-650 to-blue-500",
     },
     {
-      id: "ai-analysis",
-      label: "AI Analysis",
-      title: "2. Gemini Neural Triage",
-      desc: "Gemini Vision automatically inspects the image, evaluates depth & severity indices, assigns standard municipal classifications, filters duplicate reports, and designs a required toolkit manifest.",
-      icon: <Brain className="w-5 h-5 text-purple-400" />,
-      sub: "Cognitive Engine",
-      accent: "from-purple-600 to-indigo-500",
+      id: "ai-classifies",
+      label: "AI Classifies Issue",
+      title: "AI Classifies Issue",
+      desc: "Gemini Vision diagnoses severity, classifies categories, estimates material budgets, and compiles specialized crew manifests instantly.",
+      icon: <Brain className="w-5 h-5 text-purple-450" />,
+      tag: "AI Processing",
+      accent: "from-purple-650 to-indigo-500",
     },
     {
-      id: "municipality-review",
-      label: "Municipality Review",
-      title: "3. Priority Dispatch Hub",
-      desc: "City Officials review live incident maps organized by AI priority scoring. Complete crew assignments, vehicle route mappings, and equipment schedules compile instantly with zero administrative lag.",
-      icon: <Clipboard className="w-5 h-5 text-amber-400" />,
-      sub: "Administrative Desk",
+      id: "municipality-assigns",
+      label: "Municipality Assigns Team",
+      title: "Municipality Assigns Team",
+      desc: "City Dispatch directors review AI-prioritized queues and delegate tasks directly to specialized departments like Public Works or Grid Maintenance.",
+      icon: <Clipboard className="w-5 h-5 text-amber-450" />,
+      tag: "Dispatch Control",
       accent: "from-amber-600 to-orange-500",
     },
     {
       id: "resolution-verification",
       label: "Resolution Verification",
-      title: "4. Gemini Visual Audit",
-      desc: "Repairs are validated via live side-by-side 'before' and 'after' photo inspection. Gemini Vision audits work quality and computes a structural confidence coefficient to verify restoration.",
-      icon: <CheckCircle2 className="w-5 h-5 text-emerald-400" />,
-      sub: "Verification Core",
+      title: "Resolution Verification",
+      desc: "Field crews upload a repair photo on site. Gemini Vision runs comparative side-by-side pixel analysis to verify resolution efficacy.",
+      icon: <CheckCircle2 className="w-5 h-5 text-emerald-450" />,
+      tag: "Quality Audit",
       accent: "from-emerald-600 to-teal-500",
     },
     {
       id: "issue-closed",
       label: "Issue Closed",
-      title: "5. Automated Restructuring",
-      desc: "Once audited successfully, the ticket closes. Regional Heatmaps reorganize, public dashboard statistics increment instantly in real-time, and reporting citizens receive a verified completion confirmation.",
-      icon: <ShieldAlert className="w-5 h-5 text-cyan-400" />,
-      sub: "Resolution Gateway",
+      title: "Issue Closed & Archived",
+      desc: "Audited issues transition status to Verified & Closed. Regional heatmaps, analytics dashboards, and citizen progress reports update in real-time.",
+      icon: <Shield className="w-5 h-5 text-cyan-400" />,
+      tag: "Completed Loop",
       accent: "from-cyan-600 to-emerald-500",
     },
   ];
@@ -274,70 +292,71 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
   return (
     <div id="landing-page" className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-white relative overflow-hidden">
       
-      {/* Floating Glowing Background Orbs */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[120px] -z-10 animate-pulse pointer-events-none" style={{ animationDuration: "8s" }}></div>
-      <div className="absolute top-[40%] right-10 w-[450px] h-[450px] bg-purple-600/10 rounded-full blur-[140px] -z-10 pointer-events-none"></div>
-      <div className="absolute bottom-10 left-10 w-[600px] h-[600px] bg-indigo-900/10 rounded-full blur-[150px] -z-10 pointer-events-none"></div>
+      {/* Visual background decorations */}
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[130px] -z-10 animate-pulse pointer-events-none" style={{ animationDuration: "12s" }}></div>
+      <div className="absolute top-[35%] right-10 w-[450px] h-[450px] bg-purple-600/10 rounded-full blur-[130px] -z-10 pointer-events-none"></div>
 
-      {/* AI Network Interactive Line Simulation */}
+      {/* Network Animated Lines Background */}
       <AINetworkBackground />
 
-      {/* Modern Glassmorphic Navigation Bar */}
-      <header className="sticky top-0 z-50 bg-slate-950/70 backdrop-blur-xl border-b border-slate-900/80 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
+      {/* Navigation Header */}
+      <header className="sticky top-0 z-50 bg-slate-950/70 backdrop-blur-xl border-b border-slate-900/80 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           
-          {/* Logo Brand Group */}
           <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => onNavigate("landing")}>
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-indigo-600/35 group-hover:scale-105 transition-all">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-primary to-indigo-500 flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-indigo-600/25 group-hover:scale-105 transition-all">
               C
             </div>
-            <span className="text-xl font-black tracking-tight text-white">
+            <span className="text-lg font-black tracking-tight text-white">
               Civic<span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">Sense</span>
             </span>
           </div>
 
-          {/* Navigation Links and CTAs */}
-          <div className="flex items-center space-x-5">
-            <button
+          <div className="flex items-center space-x-4">
+            <Button
               onClick={() => onNavigate("dashboard")}
-              className="hidden md:inline-flex text-sm font-bold text-slate-400 hover:text-white hover:bg-slate-900/50 px-4 py-2 rounded-xl transition-all"
+              variant="ghost"
+              size="sm"
+              className="hidden md:inline-flex"
             >
               Public Dashboard
-            </button>
-            <button
+            </Button>
+            <Button
               id="nav-login-btn"
               onClick={() => onNavigate("login")}
-              className="px-4 py-2.5 text-sm font-bold text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-850 rounded-xl transition-all shadow-md"
+              variant="secondary"
+              size="sm"
             >
               Sign In
-            </button>
-            <button
+            </Button>
+            <Button
               id="nav-report-btn"
               onClick={() => onNavigate("report")}
-              className="px-5 py-2.5 text-sm font-extrabold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-xl shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40 transition-all hover:-translate-y-0.5"
+              variant="primary"
+              size="sm"
             >
               Report Issue
-            </button>
+            </Button>
           </div>
         </div>
       </header>
 
-      {/* Main Interactive Hero Section */}
-      <section className="relative pt-20 pb-24 lg:pt-28 lg:pb-36 px-4 sm:px-6 lg:px-8">
+      {/* Hero Section */}
+      <section className="relative pt-24 pb-28 lg:pt-32 lg:pb-36 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
             
-            {/* LEFT: Heading, Pitch, and Interactive Actions */}
+            {/* Left Column: Heading and Description */}
             <div className="space-y-8 lg:col-span-7">
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                className="inline-flex items-center space-x-2.5 bg-indigo-950/60 border border-indigo-800/40 px-4 py-2 rounded-full backdrop-blur-md"
+                className="inline-flex items-center space-x-2.5 bg-indigo-950/40 border border-indigo-900/30 px-4 py-2 rounded-full backdrop-blur-md"
               >
                 <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" />
                 <span className="text-xs font-bold text-indigo-300 tracking-wider uppercase font-mono">
-                  Autonomous Municipal Triage Core
+                  Smart City Triage Engine
                 </span>
               </motion.div>
 
@@ -348,10 +367,9 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
                   transition={{ duration: 0.6, delay: 0.1 }}
                   className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.1] text-white"
                 >
-                  Premium Smart City <br />
-                  Infrastructure & <br />
-                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
-                    AI-Driven Dispatch
+                  AI-Powered Smart City <br />
+                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-brand-primary via-indigo-500 to-pink-500">
+                    Infrastructure Management
                   </span>
                 </motion.h1>
 
@@ -359,426 +377,501 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.2 }}
-                  className="text-slate-400 text-base sm:text-lg max-w-xl leading-relaxed"
+                  className="text-slate-400 text-sm sm:text-base max-w-xl leading-relaxed font-semibold"
                 >
-                  Unifying civic action with municipal intelligence. CivicSense harnesses multimodal Gemini Vision modeling to analyze, categorize, prevent duplicate tickets, and audit completed field repairs with surgical precision.
+                  Empowering citizens and municipal departments to collaborate on public repairs. Citizens file photo reports of local issues, which our multimodal Gemini Vision engine triages, classifies, and automatically verifies upon completion.
                 </motion.p>
               </div>
 
-              {/* Dynamic Action Buttons */}
+              {/* Action Buttons */}
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.3 }}
                 className="flex flex-col sm:flex-row gap-4"
               >
-                <button
+                <Button
                   id="hero-report-btn"
                   onClick={() => onNavigate("report")}
-                  className="flex items-center justify-center px-7 py-4 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-extrabold rounded-2xl shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/40 transition-all hover:-translate-y-0.5 space-x-2 group cursor-pointer"
+                  variant="primary"
+                  size="lg"
+                  rightIcon={<ArrowRight className="w-4.5 h-4.5 transition-transform group-hover:translate-x-1" />}
+                  className="group"
                 >
-                  <span>File a Municipal Report</span>
-                  <ArrowRight className="w-4.5 h-4.5 transition-transform group-hover:translate-x-1" />
-                </button>
-                <button
+                  Report an Issue
+                </Button>
+                <Button
                   onClick={() => onNavigate("dashboard")}
-                  className="flex items-center justify-center px-7 py-4 bg-slate-900/80 hover:bg-slate-800 text-slate-200 hover:text-white font-bold rounded-2xl border border-slate-800 hover:border-slate-700 transition-all shadow-md cursor-pointer backdrop-blur-md"
+                  variant="secondary"
+                  size="lg"
                 >
-                  Explore Public Dashboard
-                </button>
+                  Explore Dashboard
+                </Button>
               </motion.div>
 
-              {/* Trust/Capabilities Markers */}
+              {/* Capabilities checklist */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.5 }}
-                className="pt-8 border-t border-slate-900 flex flex-wrap gap-x-8 gap-y-4 text-slate-500 text-xs font-semibold uppercase tracking-wider font-mono"
+                className="pt-8 border-t border-slate-900 flex flex-wrap gap-x-8 gap-y-4 text-slate-500 text-[10px] font-bold uppercase tracking-wider font-mono"
               >
                 <div className="flex items-center space-x-2">
                   <Activity className="w-4 h-4 text-indigo-500" />
-                  <span>Geocoded Telemetry</span>
+                  <span>Geolocated Telemetry</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Brain className="w-4 h-4 text-purple-500" />
-                  <span>Gemini Vision Audit</span>
+                  <span>Gemini Comparative Verification</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Shield className="w-4 h-4 text-emerald-500" />
-                  <span>Duplicate Defense</span>
+                  <span>Duplicate Report Prevention</span>
                 </div>
               </motion.div>
             </div>
 
-            {/* RIGHT: Floating Mock / Simulation Console */}
+            {/* Right Column: Floating Console Card */}
             <div className="lg:col-span-5 relative">
+              <div className="absolute inset-0 bg-indigo-500/5 rounded-3xl blur-3xl -z-10" />
               
-              {/* Glassmorphic card back-glow */}
-              <div className="absolute inset-0 bg-indigo-500/10 rounded-3xl blur-3xl -z-10 animate-pulse" style={{ animationDuration: "6s" }}></div>
-              
-              {/* Floating Civic-themed illustrations / Mock elements */}
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 15 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.2 }}
-                className="bg-slate-950/80 rounded-3xl border border-slate-850 shadow-2xl p-6 sm:p-7 space-y-6 relative overflow-hidden backdrop-blur-xl"
               >
-                {/* Console header */}
-                <div className="flex items-center justify-between border-b border-slate-900 pb-4">
-                  <div className="flex items-center space-x-2">
-                    <span className="w-3.5 h-3.5 rounded-full bg-indigo-500/30 border border-indigo-500/50 flex items-center justify-center">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                    </span>
-                    <span className="text-[10px] font-bold font-mono tracking-widest text-slate-400 uppercase">SYS_TELEMETRY</span>
-                  </div>
-                  <span className="text-[10px] font-black font-mono bg-indigo-950/50 px-2.5 py-1 rounded-md border border-indigo-900/30 text-indigo-400">
-                    GEMINI-3.5-PRO
-                  </span>
-                </div>
-
-                {/* Main Visual Display */}
-                <div className="space-y-4">
-                  {/* Floating active ticket widget */}
-                  <div className="bg-slate-900/40 p-4 rounded-2xl border border-slate-850/80 hover:border-indigo-900/60 transition-colors space-y-3 relative overflow-hidden">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-950 text-indigo-400 border border-indigo-900/30 px-2.5 py-0.5 rounded-full">
-                        Roads Category
+                <Card variant="glass" glow="indigo" className="p-6 sm:p-7 space-y-6">
+                  
+                  {/* Console Header */}
+                  <div className="flex items-center justify-between border-b border-slate-900 pb-4">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
                       </span>
-                      <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-indigo-500 animate-spin" style={{ animationDuration: "6s" }} /> 12m ago
-                      </span>
+                      <span className="text-[10px] font-bold font-mono tracking-wider text-slate-400 uppercase">SYS_MONITOR</span>
                     </div>
-                    <div className="space-y-1">
-                      <h3 className="font-bold text-slate-200 text-sm">Arterial Asphalt Pothole</h3>
-                      <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">
-                        Severe baseline shear and subgrade asphalt shifting detected near crosswalk transit hub. High hazard count.
+                    <span className="text-[9px] font-black font-mono bg-indigo-950/50 px-2 py-0.5 rounded border border-indigo-900/30 text-indigo-400">
+                      GEMINI-VISION-1.5
+                    </span>
+                  </div>
+
+                  {/* Incident Ticker Widget */}
+                  <div className="space-y-4">
+                    <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-900 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Badge variant="success">Utility Division</Badge>
+                        <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-indigo-400" /> Live Feed
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="font-bold text-slate-200 text-xs">Municipal Water Burst</h3>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Clean drinking water leakage reported at CP intersection. Flow rate high, compromising local road asphalt integrity.
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-1.5 text-[10px] text-slate-500 font-medium">
+                        <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Connaught Place, New Delhi</span>
+                      </div>
+                    </div>
+
+                    {/* AI Predictor Bubble */}
+                    <div className="bg-gradient-to-r from-indigo-950/40 to-purple-950/40 border border-indigo-900/30 p-4 rounded-2xl">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Brain className="w-4 h-4 text-indigo-400" />
+                        <span className="text-[9px] font-bold tracking-wider uppercase text-indigo-300 font-mono">
+                          Gemini Classification
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-350 leading-relaxed font-semibold">
+                        "Priority Index set to <span className="text-indigo-300">Level 2 (High)</span>. Pre-dispatch crew manifests created containing asphalt patching toolkits and sandbags."
                       </p>
                     </div>
-                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-400">
-                      <MapPin className="w-3.5 h-3.5 text-indigo-500" />
-                      <span className="font-medium">Block A1, Connaught Place, New Delhi</span>
-                    </div>
                   </div>
-
-                  {/* Gemini Smart Dispatch Recommendation Widget */}
-                  <div className="bg-gradient-to-r from-indigo-950/80 to-purple-950/80 border border-indigo-900/40 p-4 rounded-2xl relative overflow-hidden">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Brain className="w-4 h-4 text-indigo-400" />
-                      <span className="text-[10px] font-extrabold tracking-wider uppercase text-indigo-300">
-                        AI TRIAGE PREDICTION
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      "Hazard classified as <b className="text-indigo-300">Critical Priority</b>. Dispatch routing queued to Municipal Ward 3. Duplicate checks passed (0 nearby records matching coordinate set)."
-                    </p>
-                  </div>
-                </div>
-
-                {/* Instant Portal Fast Access Buttons */}
-                <div className="grid grid-cols-2 gap-3.5 pt-2">
-                  <button
-                    onClick={() => onLoginAsGuest("citizen")}
-                    className="py-3 px-4 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 rounded-xl text-xs font-extrabold text-slate-300 hover:text-white transition-all text-center cursor-pointer transform hover:-translate-y-0.5 shadow-sm"
-                  >
-                    Demo Citizen Portal
-                  </button>
-                  <button
-                    onClick={() => onLoginAsGuest("official")}
-                    className="py-3 px-4 bg-gradient-to-r from-indigo-650 to-purple-650 hover:from-indigo-600 hover:to-purple-600 rounded-xl text-xs font-extrabold text-white transition-all text-center cursor-pointer transform hover:-translate-y-0.5 shadow-md shadow-indigo-600/10"
-                  >
-                    Demo Official Desk
-                  </button>
-                </div>
-              </motion.div>
-
-              {/* Decorative Floating Icon Widget */}
-              <motion.div
-                animate={{
-                  y: [0, -8, 0],
-                }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
-                className="absolute -bottom-6 -left-6 bg-slate-900 border border-slate-800 p-3.5 rounded-2xl shadow-xl flex items-center space-x-3 backdrop-blur-md hidden sm:flex"
-              >
-                <div className="w-8 h-8 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 border border-indigo-500/30">
-                  <Activity className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider font-mono">LIVE DISPATCH</p>
-                  <p className="text-xs font-bold text-white">Active Resolution Loop</p>
-                </div>
+                </Card>
               </motion.div>
             </div>
-
           </div>
         </div>
       </section>
 
-      {/* Dynamic Statistics Section - Realtime Aggregations */}
-      <section className="bg-slate-950 border-y border-slate-900/80 py-20 relative">
+      {/* Statistics Section (Viewport Animated) */}
+      <motion.section 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="bg-slate-950 border-y border-slate-900/80 py-20 relative z-10"
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
-          <div className="text-center max-w-xl mx-auto mb-16 space-y-2">
-            <h2 className="text-xs font-bold text-indigo-400 tracking-wider uppercase font-mono">Live Operations Hub</h2>
-            <p className="text-3xl font-black text-white">Aggregated System Telemetry</p>
-            <p className="text-sm text-slate-400">
-              Live indicators computed directly from citizen-reported data and official repair transactions logged on Firestore.
+          <div className="text-center max-w-xl mx-auto mb-16 space-y-2.5">
+            <span className="text-xs font-bold text-indigo-405 tracking-wider uppercase font-mono">Operations Status</span>
+            <h2 className="text-3xl font-black text-white">Platform System Metrics</h2>
+            <p className="text-xs text-slate-400 leading-relaxed font-medium">
+              Dynamic indicators synced with live citizen reports and verified dispatcher records on Firestore.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
             
-            {/* KPI 1: Issues Submitted */}
-            <motion.div 
-              whileHover={{ y: -4, borderColor: "rgba(99,102,241,0.4)" }}
-              className="bg-slate-900/40 border border-slate-850 p-6 rounded-2xl shadow-lg relative overflow-hidden group transition-all"
-            >
-              <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 group-hover:scale-105 transition-transform">
-                <FileText className="w-20 h-20 text-indigo-400" />
-              </div>
-              <div className="flex items-center space-x-2.5 mb-4">
-                <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  <FileText className="w-4.5 h-4.5" />
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">Total Issues</span>
-              </div>
-              <div className="flex items-baseline space-x-2">
-                <span className="text-4xl font-black text-white tracking-tight">
-                  {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={totalIssues} />}
-                </span>
-                <span className="text-xs font-bold text-indigo-400">tickets</span>
-              </div>
+            {/* KPI 1: Issues Reported */}
+            <motion.div whileHover={{ y: -4 }} className="h-full">
+              <Card variant="interactive" className="p-6 relative group h-full bg-slate-900/10 border-slate-900">
+                <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-105 transition-transform">
+                  <FileText className="w-24 h-24 text-indigo-400" />
+                </div>
+                <div className="flex items-center space-x-2.5 mb-4">
+                  <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                    <FileText className="w-4 h-4" />
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-450 uppercase tracking-widest font-mono">Issues Reported</span>
+                </div>
+                <div className="flex items-baseline space-x-1">
+                  <span className="text-3xl font-black text-white tracking-tight">
+                    {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={totalIssues} />}
+                  </span>
+                  <span className="text-xs font-bold text-indigo-405 font-mono">Tickets</span>
+                </div>
+              </Card>
             </motion.div>
 
             {/* KPI 2: Issues Resolved */}
-            <motion.div 
-              whileHover={{ y: -4, borderColor: "rgba(16,185,129,0.4)" }}
-              className="bg-slate-900/40 border border-slate-850 p-6 rounded-2xl shadow-lg relative overflow-hidden group transition-all"
-            >
-              <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 group-hover:scale-105 transition-transform">
-                <CheckCircle2 className="w-20 h-20 text-emerald-400" />
-              </div>
-              <div className="flex items-center space-x-2.5 mb-4">
-                <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  <CheckCircle2 className="w-4.5 h-4.5" />
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">Resolved</span>
-              </div>
-              <div className="flex items-baseline space-x-2">
-                <span className="text-4xl font-black text-white tracking-tight">
-                  {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={resolvedIssues} />}
-                </span>
-                <span className="text-xs font-bold text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-900/30 font-mono">
-                  {totalIssues > 0 ? Math.round((resolvedIssues / totalIssues) * 100) : 0}% rate
-                </span>
-              </div>
+            <motion.div whileHover={{ y: -4 }} className="h-full">
+              <Card variant="interactive" className="p-6 relative group h-full bg-slate-900/10 border-slate-900">
+                <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-105 transition-transform">
+                  <CheckCircle2 className="w-24 h-24 text-emerald-400" />
+                </div>
+                <div className="flex items-center space-x-2.5 mb-4">
+                  <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-450 uppercase tracking-widest font-mono">Issues Resolved</span>
+                </div>
+                <div className="flex items-baseline space-x-1.5">
+                  <span className="text-3xl font-black text-white tracking-tight">
+                    {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={resolvedIssues} />}
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 font-mono">
+                    {totalIssues > 0 ? Math.round((resolvedIssues / totalIssues) * 100) : 0}% Rate
+                  </span>
+                </div>
+              </Card>
             </motion.div>
 
             {/* KPI 3: Cities Covered */}
-            <motion.div 
-              whileHover={{ y: -4, borderColor: "rgba(245,158,11,0.4)" }}
-              className="bg-slate-900/40 border border-slate-850 p-6 rounded-2xl shadow-lg relative overflow-hidden group transition-all"
-            >
-              <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 group-hover:scale-105 transition-transform">
-                <Building className="w-20 h-20 text-amber-400" />
-              </div>
-              <div className="flex items-center space-x-2.5 mb-4">
-                <span className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  <Building className="w-4.5 h-4.5" />
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">Cities Cover</span>
-              </div>
-              <div className="flex items-baseline space-x-2">
-                <span className="text-4xl font-black text-white tracking-tight">
-                  {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={citiesCovered} />}
-                </span>
-                <span className="text-xs font-bold text-amber-400">centers</span>
-              </div>
+            <motion.div whileHover={{ y: -4 }} className="h-full">
+              <Card variant="interactive" className="p-6 relative group h-full bg-slate-900/10 border-slate-900">
+                <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-105 transition-transform">
+                  <Building className="w-24 h-24 text-amber-400" />
+                </div>
+                <div className="flex items-center space-x-2.5 mb-4">
+                  <span className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <Building className="w-4 h-4" />
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-455 uppercase tracking-widest font-mono">Cities Covered</span>
+                </div>
+                <div className="flex items-baseline space-x-1">
+                  <span className="text-3xl font-black text-white tracking-tight">
+                    {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={citiesCovered} />}
+                  </span>
+                  <span className="text-xs font-bold text-amber-400 font-mono">Centers</span>
+                </div>
+              </Card>
             </motion.div>
 
             {/* KPI 4: Average Resolution Time */}
-            <motion.div 
-              whileHover={{ y: -4, borderColor: "rgba(139,92,246,0.4)" }}
-              className="bg-slate-900/40 border border-slate-850 p-6 rounded-2xl shadow-lg relative overflow-hidden group transition-all"
-            >
-              <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 group-hover:scale-105 transition-transform">
-                <Timer className="w-20 h-20 text-purple-400" />
-              </div>
-              <div className="flex items-center space-x-2.5 mb-4">
-                <span className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                  <Timer className="w-4.5 h-4.5" />
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">Avg Speed</span>
-              </div>
-              <div className="flex items-baseline space-x-2">
-                <span className="text-4xl font-black text-white tracking-tight">
-                  {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={avgResolutionTime} />}
-                </span>
-                <span className="text-xs font-bold text-purple-400">hours avg</span>
-              </div>
+            <motion.div whileHover={{ y: -4 }} className="h-full">
+              <Card variant="interactive" className="p-6 relative group h-full bg-slate-900/10 border-slate-900">
+                <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-105 transition-transform">
+                  <Timer className="w-24 h-24 text-purple-400" />
+                </div>
+                <div className="flex items-center space-x-2.5 mb-4">
+                  <span className="p-2 rounded-xl bg-purple-500/10 text-purple-405 border border-purple-500/20">
+                    <Timer className="w-4 h-4" />
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-455 uppercase tracking-widest font-mono">Avg Resolution Time</span>
+                </div>
+                <div className="flex items-baseline space-x-1">
+                  <span className="text-3xl font-black text-white tracking-tight">
+                    {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={avgResolutionTime} />}
+                  </span>
+                  <span className="text-xs font-bold text-purple-400 font-mono">Hours</span>
+                </div>
+              </Card>
             </motion.div>
 
-            {/* KPI 5: AI Accuracy Verification */}
-            <motion.div 
-              whileHover={{ y: -4, borderColor: "rgba(6,182,212,0.4)" }}
-              className="bg-slate-900/40 border border-slate-850 p-6 rounded-2xl shadow-lg relative overflow-hidden group transition-all"
-            >
-              <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 group-hover:scale-105 transition-transform">
-                <Brain className="w-20 h-20 text-cyan-400" />
-              </div>
-              <div className="flex items-center space-x-2.5 mb-4">
-                <span className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                  <Brain className="w-4.5 h-4.5" />
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">AI Accuracy</span>
-              </div>
-              <div className="flex items-baseline space-x-2">
-                <span className="text-4xl font-black text-white tracking-tight">
-                  {loading ? (
-                    <span className="animate-pulse">...</span>
-                  ) : (
-                    <span className="tabular-nums">{aiAccuracy}%</span>
-                  )}
-                </span>
-                <span className="text-[10px] font-extrabold text-cyan-400 bg-cyan-950/50 px-1.5 py-0.5 rounded border border-cyan-900/30 uppercase font-mono">
-                  Gemini verified
-                </span>
-              </div>
+            {/* KPI 5: AI Triage Rate */}
+            <motion.div whileHover={{ y: -4 }} className="h-full">
+              <Card variant="interactive" className="p-6 relative group h-full bg-slate-900/10 border-slate-900">
+                <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-105 transition-transform">
+                  <Brain className="w-24 h-24 text-cyan-400" />
+                </div>
+                <div className="flex items-center space-x-2.5 mb-4">
+                  <span className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                    <Brain className="w-4 h-4" />
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-455 uppercase tracking-widest font-mono">AI Triage Rate</span>
+                </div>
+                <div className="flex items-baseline space-x-1">
+                  <span className="text-3xl font-black text-white tracking-tight">
+                    {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={aiTriageRate} postfix="%" />}
+                  </span>
+                  <span className="text-[9px] font-extrabold text-cyan-400 bg-cyan-950/20 px-1.5 py-0.5 rounded border border-cyan-900/30 font-mono uppercase">
+                    Gemini Core
+                  </span>
+                </div>
+              </Card>
             </motion.div>
 
           </div>
         </div>
-      </section>
+      </motion.section>
 
-      {/* "How CivicSense Works" Animated Timeline Section */}
-      <section className="bg-slate-950 py-24 sm:py-32 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      {/* Feature Cards Grid (6 Premium Cards) */}
+      <motion.section 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="bg-slate-950 py-24 border-t border-slate-900/60 relative z-10"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
-          <div className="text-center max-w-2xl mx-auto space-y-4 mb-20">
-            <h2 className="text-xs font-bold text-indigo-400 tracking-wider uppercase font-mono">
-              Operational Roadmap
-            </h2>
-            <p className="text-3xl font-black tracking-tight text-white sm:text-4xl">
-              How CivicSense Restructures Services
+          <div className="text-center max-w-2xl mx-auto mb-20 space-y-3">
+            <span className="text-xs font-bold text-indigo-400 tracking-wider uppercase font-mono">Advanced Capabilities</span>
+            <p className="text-3xl font-black text-white tracking-tight sm:text-4xl">Platform Features</p>
+            <p className="text-xs sm:text-sm text-slate-450 leading-relaxed font-semibold">
+              CivicSense provides dynamic artificial intelligence processing combined with robust infrastructure maps to automate city management.
             </p>
-            <p className="text-sm sm:text-base text-slate-400 max-w-xl mx-auto">
-              Follow our fully integrated, automated reporting-to-resolution pipeline.
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            
+            {/* Card 1: AI Issue Detection */}
+            <motion.div whileHover={{ y: -6 }}>
+              <Card variant="interactive" className="p-8 space-y-5 h-full bg-slate-900/10 border-slate-900">
+                <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center text-indigo-400">
+                  <Brain className="w-6 h-6 animate-pulse" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-black text-white">AI Issue Detection</h3>
+                  <p className="text-slate-400 text-xs sm:text-sm leading-relaxed font-medium">
+                    Multimodal Gemini Vision reads incident photographs, assigns municipal defect categories, forecasts repair materials, and rates priority severity instantly.
+                  </p>
+                </div>
+              </Card>
+            </motion.div>
+
+            {/* Card 2: Duplicate Detection */}
+            <motion.div whileHover={{ y: -6 }}>
+              <Card variant="interactive" className="p-8 space-y-5 h-full bg-slate-900/10 border-slate-900">
+                <div className="w-12 h-12 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400">
+                  <Layers className="w-6 h-6" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-black text-white">Duplicate Detection</h3>
+                  <p className="text-slate-400 text-xs sm:text-sm leading-relaxed font-medium">
+                    Haversine proximity algorithms check localized coordinates to block redundant ticket creations, redirecting citizens to endorse existing reports instead.
+                  </p>
+                </div>
+              </Card>
+            </motion.div>
+
+            {/* Card 3: AI Resolution Verification */}
+            <motion.div whileHover={{ y: -6 }}>
+              <Card variant="interactive" className="p-8 space-y-5 h-full bg-slate-900/10 border-slate-900">
+                <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center text-emerald-400">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-black text-white">AI Resolution Verification</h3>
+                  <p className="text-slate-400 text-xs sm:text-sm leading-relaxed font-medium">
+                    Automated side-by-side analysis compares original defects against crew completion photographs, computing a confidence coefficient to confirm structural resolution.
+                  </p>
+                </div>
+              </Card>
+            </motion.div>
+
+            {/* Card 4: Live Infrastructure Map */}
+            <motion.div whileHover={{ y: -6 }}>
+              <Card variant="interactive" className="p-8 space-y-5 h-full bg-slate-900/10 border-slate-900">
+                <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center text-amber-400">
+                  <Compass className="w-6 h-6" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-black text-white">Live Infrastructure Map</h3>
+                  <p className="text-slate-400 text-xs sm:text-sm leading-relaxed font-medium">
+                    Interactive OpenStreetMap configurations overlay coordinates and active issue clusters directly, mapping repair routes and localized municipal centers.
+                  </p>
+                </div>
+              </Card>
+            </motion.div>
+
+            {/* Card 5: Municipal Analytics */}
+            <motion.div whileHover={{ y: -6 }}>
+              <Card variant="interactive" className="p-8 space-y-5 h-full bg-slate-900/10 border-slate-900">
+                <div className="w-12 h-12 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl flex items-center justify-center text-cyan-400">
+                  <BarChart2 className="w-6 h-6" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-black text-white">Municipal Analytics</h3>
+                  <p className="text-slate-400 text-xs sm:text-sm leading-relaxed font-medium">
+                    Real-time pipelines display department metrics, unresolved backlog counts, speed rates, and visual category breakdowns for dispatch officers.
+                  </p>
+                </div>
+              </Card>
+            </motion.div>
+
+            {/* Card 6: Citizen Reporting */}
+            <motion.div whileHover={{ y: -6 }}>
+              <Card variant="interactive" className="p-8 space-y-5 h-full bg-slate-900/10 border-slate-900">
+                <div className="w-12 h-12 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center text-red-400">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-black text-white">Citizen Reporting</h3>
+                  <p className="text-slate-400 text-xs sm:text-sm leading-relaxed font-medium">
+                    Geolocated report portals support simple visual file uploads, autocomplete addresses, and quick prefabricated templates to lower entry friction.
+                  </p>
+                </div>
+              </Card>
+            </motion.div>
+
+          </div>
+        </div>
+      </motion.section>
+
+      {/* "How CivicSense Works" Timeline (5 Steps) */}
+      <motion.section 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="bg-slate-950 py-24 sm:py-32 relative z-10 border-t border-slate-900/60"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          
+          <div className="text-center max-w-2xl mx-auto space-y-3 mb-20">
+            <span className="text-xs font-bold text-indigo-400 tracking-wider uppercase font-mono">
+              Operational Roadmap
+            </span>
+            <h2 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+              How CivicSense Works
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-450 leading-relaxed font-semibold">
+              An automated, end-to-end telemetry system linking citizens to dispatch crews.
             </p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             
-            {/* Timeline selector (Interactive left panel) */}
+            {/* Timeline Selector Cards on Left */}
             <div className="lg:col-span-5 space-y-4">
               {timelineSteps.map((step, idx) => {
-                const isSelected = activeWorkflowStep === idx;
+                const isSelected = activeTimelineStep === idx;
                 return (
-                  <motion.div
+                  <button
                     key={step.id}
-                    whileHover={{ scale: 1.01 }}
-                    onClick={() => setActiveWorkflowStep(idx)}
-                    className={`p-5 rounded-2xl border transition-all duration-300 cursor-pointer text-left relative overflow-hidden ${
+                    onClick={() => setActiveTimelineStep(idx)}
+                    className={`w-full p-5 rounded-2xl border transition-all duration-300 cursor-pointer text-left relative overflow-hidden flex items-center space-x-4 ${
                       isSelected 
-                        ? "bg-slate-900 border-indigo-500/50 shadow-lg shadow-indigo-950/40" 
+                        ? "bg-indigo-950/20 border-indigo-500/50 shadow-lg" 
                         : "bg-slate-900/30 border-slate-900 hover:bg-slate-900/50 hover:border-slate-800"
                     }`}
                   >
-                    {/* Pulsing indicator line on left edge of selected step */}
                     {isSelected && (
                       <motion.div 
                         layoutId="active-indicator"
-                        className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-indigo-500 to-purple-500" 
+                        className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-indigo-500 to-purple-500" 
                       />
                     )}
 
-                    <div className="flex items-center space-x-4">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${
-                        isSelected 
-                          ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" 
-                          : "bg-slate-950 text-slate-500 border-slate-850"
-                      }`}>
-                        {step.icon}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <p className={`text-sm font-bold tracking-tight ${isSelected ? "text-white" : "text-slate-400"}`}>
-                            {step.label}
-                          </p>
-                          <span className={`text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                            isSelected ? "bg-indigo-950 text-indigo-400 border border-indigo-900/40" : "bg-slate-950 text-slate-500 border-slate-900"
-                          }`}>
-                            {step.sub}
-                          </span>
-                        </div>
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${
+                      isSelected 
+                        ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" 
+                        : "bg-slate-950 text-slate-500 border-slate-850"
+                    }`}>
+                      {step.icon}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`text-xs font-bold truncate ${isSelected ? "text-white animate-none" : "text-slate-405"}`}>
+                          {step.label}
+                        </p>
+                        <span className={`text-[8px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0 font-mono ${
+                          isSelected 
+                            ? "bg-indigo-950 text-indigo-450 border-indigo-900/30" 
+                            : "bg-slate-950 text-slate-500 border-slate-900"
+                        }`}>
+                          Step {idx + 1}
+                        </span>
                       </div>
                     </div>
-                  </motion.div>
+                  </button>
                 );
               })}
             </div>
 
-            {/* Graphical timeline stage viewer (Right panel) */}
+            {/* Timeline Screen Viewer on Right */}
             <div className="lg:col-span-7">
-              <div className="bg-slate-900/40 border border-slate-850 rounded-3xl p-6 sm:p-10 relative overflow-hidden min-h-[440px] flex flex-col justify-between backdrop-blur-xl">
+              <div className="bg-slate-900/20 border border-slate-900 rounded-3xl p-8 sm:p-10 relative overflow-hidden min-h-[400px] flex flex-col justify-between backdrop-blur-xl">
                 
-                {/* Visual grid lines decoration */}
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(99,102,241,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(99,102,241,0.03)_1px,transparent_1px)] bg-[size:2rem_2rem] pointer-events-none"></div>
+                {/* Visual design grids */}
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(99,102,241,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(99,102,241,0.03)_1px,transparent_1px)] bg-[size:2rem_2rem] pointer-events-none" />
 
-                <div className="flex items-center justify-between border-b border-slate-850 pb-4 mb-6 relative z-10">
-                  <div className="flex items-center space-x-1.5 text-[10px] font-bold text-indigo-400 font-mono tracking-widest uppercase">
-                    <CloudLightning className="w-3.5 h-3.5" /> PIPELINE_STAGE_{activeWorkflowStep + 1}
+                <div className="flex items-center justify-between border-b border-slate-900 pb-4 mb-6 relative z-10">
+                  <div className="flex items-center space-x-1.5 text-[9px] font-bold text-indigo-400 font-mono tracking-widest uppercase">
+                    <CloudLightning className="w-3.5 h-3.5" /> PIPELINE_STAGE_{activeTimelineStep + 1}
                   </div>
                   <div className="flex space-x-1.5">
                     {timelineSteps.map((_, i) => (
-                      <span key={i} className={`h-1.5 rounded-full transition-all duration-350 ${
-                        i === activeWorkflowStep ? "bg-indigo-500 w-6" : "bg-slate-800 w-1.5"
-                      }`}></span>
+                      <span key={i} className={`h-1.5 rounded-full transition-all duration-300 ${
+                        i === activeTimelineStep ? "bg-indigo-500 w-6" : "bg-slate-800 w-1.5"
+                      }`} />
                     ))}
                   </div>
                 </div>
 
-                {/* Simulated Terminal Screen depending on active selection */}
                 <div className="flex-1 flex items-center justify-center p-2 sm:p-6 relative z-10">
                   <AnimatePresence mode="wait">
                     <motion.div
-                      key={activeWorkflowStep}
+                      key={activeTimelineStep}
                       initial={{ opacity: 0, scale: 0.96, y: 8 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.98, y: -8 }}
-                      transition={{ duration: 0.35, ease: "easeOut" }}
-                      className="text-center space-y-5"
+                      transition={{ duration: 0.3, ease: "easeOut" }}
+                      className="text-center space-y-4"
                     >
-                      <div className={`w-16 h-16 rounded-2xl bg-gradient-to-tr ${timelineSteps[activeWorkflowStep].accent} mx-auto flex items-center justify-center text-white shadow-xl shadow-indigo-950/50 border border-white/10`}>
-                        {timelineSteps[activeWorkflowStep].icon}
+                      <div className={`w-14 h-14 rounded-2xl bg-gradient-to-tr ${timelineSteps[activeTimelineStep].accent} mx-auto flex items-center justify-center text-white shadow-xl shadow-indigo-950/40 border border-white/10`}>
+                        {timelineSteps[activeTimelineStep].icon}
                       </div>
                       
                       <div className="space-y-2">
-                        <h3 className="text-xl font-extrabold text-white tracking-tight">{timelineSteps[activeWorkflowStep].title}</h3>
-                        <p className="text-slate-400 text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
-                          {timelineSteps[activeWorkflowStep].desc}
+                        <h3 className="text-lg font-extrabold text-white tracking-tight">{timelineSteps[activeTimelineStep].title}</h3>
+                        <p className="text-slate-400 text-xs leading-relaxed max-w-md mx-auto font-medium">
+                          {timelineSteps[activeTimelineStep].desc}
                         </p>
                       </div>
                     </motion.div>
                   </AnimatePresence>
                 </div>
 
-                {/* Stage controls & active connections indicator footer */}
-                <div className="flex items-center justify-between border-t border-slate-850 pt-5 mt-6 relative z-10 text-xs font-mono">
-                  <span className="text-slate-500 font-semibold tracking-wide flex items-center gap-1.5">
-                    <HelpCircle className="w-4 h-4 text-slate-500" /> Interactive Guide
+                <div className="flex items-center justify-between border-t border-slate-900 pt-5 mt-6 relative z-10 text-xs font-mono">
+                  <span className="text-slate-550 font-bold tracking-wide flex items-center gap-1.5">
+                    <HelpCircle className="w-4 h-4 text-slate-500" /> Operational Stage Guide
                   </span>
                   <div className="flex gap-1">
                     {timelineSteps.map((_, i) => (
                       <button
                         key={i}
-                        onClick={() => setActiveWorkflowStep(i)}
-                        className={`w-6.5 h-6.5 rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${
-                          i === activeWorkflowStep 
-                            ? "bg-indigo-600 text-white shadow-md shadow-indigo-900/40" 
-                            : "bg-slate-950 text-slate-400 hover:text-white hover:bg-slate-900 border border-slate-850"
+                        onClick={() => setActiveTimelineStep(i)}
+                        className={`w-7 h-7 rounded-lg text-[10px] font-bold flex items-center justify-center transition-all cursor-pointer ${
+                          i === activeTimelineStep 
+                            ? "bg-indigo-650 text-white shadow-md" 
+                            : "bg-slate-950 text-slate-500 hover:text-white hover:bg-slate-900 border border-slate-850"
                         }`}
                       >
                         {i + 1}
@@ -792,107 +885,56 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
 
           </div>
         </div>
-      </section>
+      </motion.section>
 
-      {/* Dynamic Key Capabilities Highlights */}
-      <section className="bg-slate-950 py-24 border-t border-slate-900/60">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          
-          <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
-            <h2 className="text-xs font-bold text-indigo-400 tracking-wider uppercase font-mono">Advanced Ecosystem</h2>
-            <p className="text-3xl font-black text-white tracking-tight sm:text-4xl">Platform Features</p>
-            <p className="text-sm text-slate-400">
-              CivicSense bridges visual diagnostics with durable local cloud persistence to secure community development.
-            </p>
-          </div>
-
-          <div className="grid gap-8 md:grid-cols-3">
-            
-            {/* Feature card 1: Dual Image Diagnostics */}
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className="bg-slate-900/30 hover:bg-slate-900/60 p-8 rounded-3xl border border-slate-900 hover:border-slate-800 transition-all duration-300 space-y-5"
-            >
-              <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center text-indigo-400">
-                <Brain className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-black text-white">Visual Audit Matching</h3>
-              <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-                Gemini Vision compares damage pictures against maintenance completion records side-by-side. Our confidence score blocks fraudulent or partial repairs from closing.
-              </p>
-            </motion.div>
-
-            {/* Feature card 2: AI Dispatch Manifests */}
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className="bg-slate-900/30 hover:bg-slate-900/60 p-8 rounded-3xl border border-slate-900 hover:border-slate-800 transition-all duration-300 space-y-5"
-            >
-              <div className="w-12 h-12 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400">
-                <Clipboard className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-black text-white">Automatic Dispatch Scopes</h3>
-              <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-                Work orders compile required equipment arrays, repair material ratios, safety warnings, and route coordinates calculated automatically from raw citizen input.
-              </p>
-            </motion.div>
-
-            {/* Feature card 3: Realtime Heatmaps */}
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className="bg-slate-900/30 hover:bg-slate-900/60 p-8 rounded-3xl border border-slate-900 hover:border-slate-800 transition-all duration-300 space-y-5"
-            >
-              <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center text-amber-400">
-                <MapPin className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-black text-white">Leaflet Geographic Sync</h3>
-              <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-                Active tickets sync to public OpenStreetMap overlays. Built-in proximity radius scanning automatically redirects users to endorse existing issues over redundant filings.
-              </p>
-            </motion.div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* Premium Gradient Call to Action (CTA) */}
-      <section className="bg-slate-950 py-24 relative overflow-hidden">
-        
-        {/* Neon decorative back-light ring */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-gradient-to-r from-indigo-550 to-purple-550 rounded-full filter blur-[150px] opacity-10 -z-10"></div>
+      {/* Premium CTA Panel */}
+      <motion.section 
+        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="bg-slate-950 py-24 relative overflow-hidden z-10 border-t border-slate-900/60"
+      >
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[300px] bg-indigo-500/10 rounded-full filter blur-[130px] opacity-20 -z-10" />
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center space-y-8">
           <div className="space-y-3">
-            <h2 className="text-3xl sm:text-4.5xl font-black tracking-tight leading-tight text-white">
+            <h2 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight text-white">
               Connect Your Neighborhood to the Grid
             </h2>
-            <p className="text-slate-400 max-w-xl mx-auto text-sm sm:text-base leading-relaxed">
-              Report local hazards in seconds, view interactive regional heatmap metrics, and follow verified visual audit logs.
+            <p className="text-slate-400 max-w-xl mx-auto text-xs sm:text-sm leading-relaxed font-semibold">
+              Report local infrastructure issues in seconds, explore geocoded regional maps, and track AI-validated resolution audits.
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-            <button
+            <Button
               onClick={() => onNavigate("report")}
-              className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-extrabold rounded-2xl shadow-lg hover:shadow-indigo-600/30 transition-all hover:-translate-y-0.5 cursor-pointer text-center text-sm"
+              variant="primary"
+              size="lg"
+              className="w-full sm:w-auto font-bold rounded-xl shadow-lg"
+              rightIcon={<ArrowUpRight className="w-4 h-4" />}
             >
-              File a Civic Report Now
-            </button>
-            <button
+              Report an Issue
+            </Button>
+            <Button
               onClick={() => onNavigate("dashboard")}
-              className="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white font-bold rounded-2xl border border-slate-800 hover:border-slate-700 transition-all cursor-pointer text-center text-sm"
+              variant="secondary"
+              size="lg"
+              className="w-full sm:w-auto font-bold rounded-xl border border-slate-800"
             >
-              Explore Public Dashboard
-            </button>
+              Explore Dashboard
+            </Button>
           </div>
         </div>
-      </section>
+      </motion.section>
 
-      {/* Styled Footer */}
+      {/* Footer */}
       <footer className="bg-slate-950 text-slate-500 border-t border-slate-900 py-12 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6 text-sm">
           
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center text-white font-extrabold text-md shadow-md shadow-indigo-650/10">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-primary to-indigo-500 flex items-center justify-center text-white font-extrabold text-md shadow-md shadow-indigo-650/10">
               C
             </div>
             <span className="text-lg font-black tracking-tight text-white">
@@ -907,7 +949,7 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
             <a href="#" className="hover:text-white transition-colors">Open Data API</a>
           </div>
 
-          <p className="text-center md:text-right text-xs text-slate-600 font-medium">
+          <p className="text-center md:text-right text-xs text-slate-600 font-medium font-mono">
             © 2026 CivicSense AI Platform. Empowering cities globally.
           </p>
         </div>
