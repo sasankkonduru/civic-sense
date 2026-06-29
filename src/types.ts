@@ -44,17 +44,6 @@ export interface Issue {
     confidenceScore: number;
     explanation: string;
     verifiedAt: string;
-    locationMatch?: number;
-    landmarkMatch?: number;
-    infrastructureMatch?: number;
-    sceneMatch?: number;
-    issueResolution?: number;
-    imageQuality?: 'Excellent' | 'Good' | 'Fair' | 'Poor';
-    recommendation?: 'Repair Verified' | 'Needs Better Evidence' | 'Manual Review Recommended' | 'Manual Inspection Required' | 'Verification Failed';
-    gpsDistanceText?: string;
-    originalCoords?: { lat: number; lng: number };
-    repairCoords?: { lat: number; lng: number };
-    contextConsistency?: number;
   };
   aiAnalysis?: AIAnalysis;
 }
@@ -128,17 +117,6 @@ export interface FirestoreIssue {
     confidenceScore: number;
     explanation: string;
     verifiedAt: string;
-    locationMatch?: number;
-    landmarkMatch?: number;
-    infrastructureMatch?: number;
-    sceneMatch?: number;
-    issueResolution?: number;
-    imageQuality?: 'Excellent' | 'Good' | 'Fair' | 'Poor';
-    recommendation?: 'Repair Verified' | 'Needs Better Evidence' | 'Manual Review Recommended' | 'Manual Inspection Required' | 'Verification Failed';
-    gpsDistanceText?: string;
-    originalCoords?: { lat: number; lng: number };
-    repairCoords?: { lat: number; lng: number };
-    contextConsistency?: number;
   };
   aiAnalysis?: AIAnalysis;
 }

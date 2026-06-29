@@ -1,10 +1,10 @@
 {
-  "projectId": "civic-sense-af71f",
-  "appId": "1:570730145334:web:4a250b41bed031b4beda97",
-  "apiKey": "AIzaSyCPMmm-rNzlruowfoyo6B-hrCpEynRiBUU",
-  "authDomain": "civic-sense-af71f.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "civic-sense-af71f.firebasestorage.app",
-  "messagingSenderId": "570730145334",
+  "projectId": "electric-kit-nsx2c",
+  "appId": "1:143261475504:web:6a59fcb441d0be18595175",
+  "apiKey": "AIzaSyD_Y-AISieIKpYEntkYEZJF6VTno--35F0",
+  "authDomain": "electric-kit-nsx2c.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-e7169681-998f-4a45-b024-f7156e76edda",
+  "storageBucket": "electric-kit-nsx2c.firebasestorage.app",
+  "messagingSenderId": "143261475504",
   "measurementId": ""
 }

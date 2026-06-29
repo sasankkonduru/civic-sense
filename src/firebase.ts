@@ -34,50 +34,7 @@ import { getSeededIssues } from "./seedData";
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
-
-let storageInstance: any = null;
-try {
-  if (firebaseConfig.storageBucket && firebaseConfig.storageBucket.trim() !== "") {
-    storageInstance = getStorage(app);
-  }
-} catch (e) {
-  console.warn("Failed to initialize Firebase Storage:", e);
-}
-export const storage = storageInstance;
-
-let isStorageVerifiedUnavailable = false;
-
-export function isStorageConfigured(): boolean {
-  if (isStorageVerifiedUnavailable) {
-    return false;
-  }
-  return (
-    !!storage &&
-    !!firebaseConfig.storageBucket &&
-    firebaseConfig.storageBucket.trim() !== "" &&
-    !firebaseConfig.storageBucket.includes("YOUR_") &&
-    !firebaseConfig.storageBucket.includes("<")
-  );
-}
-
-export function markStorageAsUnavailable() {
-  isStorageVerifiedUnavailable = true;
-}
-
-// Helper to wrap a promise with a timeout limit
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
-  let timeoutId: any;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(errorMessage));
-    }, timeoutMs);
-  });
-  
-  return Promise.race([promise, timeoutPromise]).finally(() => {
-    clearTimeout(timeoutId);
-  });
-}
-
+export const storage = getStorage(app);
 
 // Providers
 export const googleProvider = new GoogleAuthProvider();
@@ -190,98 +147,27 @@ export async function logOut() {
 
 // Storage upload helpers
 export async function uploadFileToStorage(file: File, path: string): Promise<string> {
-  if (!isStorageConfigured()) {
-    throw new Error("Firebase Storage is not configured or has been marked as unavailable.");
-  }
   try {
     const storageRef = ref(storage, path);
-    const uploadPromise = uploadBytes(storageRef, file).then(
-      async (snapshot) => await getDownloadURL(snapshot.ref)
-    );
-    return await withTimeout(uploadPromise, 4000, "Firebase Storage upload timed out.");
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
   } catch (err) {
-    console.error("Storage uploadFileToStorage failed, marking storage as unavailable:", err);
-    markStorageAsUnavailable();
+    console.error("Storage uploadFileToStorage failed:", err);
     throw err;
   }
 }
 
 export async function uploadBase64ToStorage(base64String: string, path: string): Promise<string> {
-  if (!isStorageConfigured()) {
-    throw new Error("Firebase Storage is not configured or has been marked as unavailable.");
-  }
   try {
     const storageRef = ref(storage, path);
     const format = base64String.startsWith("data:") ? "data_url" : "base64";
-    const uploadPromise = uploadString(storageRef, base64String, format).then(
-      async (snapshot) => await getDownloadURL(snapshot.ref)
-    );
-    return await withTimeout(uploadPromise, 4000, "Firebase Storage upload timed out.");
+    const snapshot = await uploadString(storageRef, base64String, format);
+    return await getDownloadURL(snapshot.ref);
   } catch (err) {
-    console.error("Storage uploadBase64ToStorage failed, marking storage as unavailable:", err);
-    markStorageAsUnavailable();
+    console.error("Storage uploadBase64ToStorage failed:", err);
     throw err;
   }
 }
-
-// Client-side base64 image compression utility to fit in Firestore 1MB limits
-export async function compressBase64Image(base64Str: string, maxBytes: number = 800000): Promise<string> {
-  return new Promise((resolve) => {
-    if (!base64Str || !base64Str.startsWith("data:image")) {
-      resolve(base64Str);
-      return;
-    }
-    
-    if (base64Str.length <= maxBytes) {
-      resolve(base64Str);
-      return;
-    }
-
-    const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      let width = img.width;
-      let height = img.height;
-      
-      const maxDimension = 1000;
-      if (width > maxDimension || height > maxDimension) {
-        if (width > height) {
-          height = Math.round((height * maxDimension) / width);
-          width = maxDimension;
-        } else {
-          width = Math.round((width * maxDimension) / height);
-          height = maxDimension;
-        }
-      }
-      
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        resolve(base64Str);
-        return;
-      }
-      
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      let quality = 0.8;
-      let result = canvas.toDataURL("image/jpeg", quality);
-      
-      while (result.length > maxBytes && quality > 0.15) {
-        quality -= 0.1;
-        result = canvas.toDataURL("image/jpeg", quality);
-      }
-      
-      resolve(result);
-    };
-    img.onerror = () => {
-      resolve(base64Str);
-    };
-  });
-}
-
 
 // Firestore utilities for issues
 export async function createFirestoreIssue(issueData: Omit<FirestoreIssue, "id" | "createdAt">): Promise<FirestoreIssue> {
