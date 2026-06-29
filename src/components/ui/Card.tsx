@@ -1,7 +1,7 @@
 import React from "react";
 
 interface CardProps extends React.ComponentPropsWithoutRef<"div"> {
-  variant?: "default" | "glass" | "bordered" | "interactive";
+  variant?: "default" | "glass" | "bordered" | "interactive" | "ai";
   glow?: "none" | "indigo" | "purple" | "emerald";
 }
 
@@ -12,13 +12,14 @@ export function Card({
   className = "",
   ...props
 }: CardProps) {
-  const baseStyles = "rounded-3xl border transition-all duration-300 font-sans overflow-hidden";
+  const baseStyles = "rounded-2xl border transition-all duration-300 font-sans overflow-hidden";
   
   const variants = {
-    default: "bg-m3-surface-variant border-m3-outline text-slate-100",
+    default: "glass-card text-slate-100",
     glass: "glass-card text-slate-100",
-    bordered: "bg-transparent border-slate-900 text-slate-100",
-    interactive: "bg-m3-surface-variant/40 border-m3-outline text-slate-100 hover:bg-m3-surface-variant/75 hover:border-indigo-500/30 hover:-translate-y-1.5 shadow-md hover:shadow-[0_22px_45px_-15px_rgba(99,102,241,0.3)] transition-all duration-300 ease-out",
+    bordered: "bg-transparent border-white/5 text-slate-100",
+    interactive: "glass-card hover:border-indigo-500/25 hover:-translate-y-1 hover:shadow-[0_20px_40px_-10px_rgba(99,102,241,0.15)] transition-all duration-300 ease-out text-slate-100",
+    ai: "gemini-ai-card text-slate-100",
   };
 
   const glows = {

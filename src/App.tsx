@@ -16,6 +16,21 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const shouldReduceMotion = useReducedMotion();
 
+  const handleNavigateDirect = (page: string, userOverride?: User | null) => {
+    const activeUser = userOverride !== undefined ? userOverride : currentUser;
+    let targetPage = page;
+    if ((page === "dashboard" || page === "report" || page === "official") && !activeUser) {
+      targetPage = "login";
+    }
+    setCurrentPage(targetPage);
+    window.location.hash = `#/${targetPage}`;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleNavigate = (page: string) => {
+    handleNavigateDirect(page, currentUser);
+  };
+
   // Load session from localStorage on mount and sync with Firebase Auth
   useEffect(() => {
     // Quick load from local storage to avoid flashing
@@ -50,6 +65,12 @@ export default function App() {
           }
         }
 
+        const selectedRole = localStorage.getItem("civic_sense_selected_role");
+        if (selectedRole === "citizen" || selectedRole === "official") {
+          role = selectedRole as "citizen" | "official";
+          localStorage.removeItem("civic_sense_selected_role");
+        }
+
         const appUser: User = {
           uid: firebaseUser.uid,
           email: firebaseUser.email || "",
@@ -61,6 +82,13 @@ export default function App() {
         };
         setCurrentUser(appUser);
         localStorage.setItem("civic_sense_user", JSON.stringify(appUser));
+
+        // Auto navigate if they are on the login page!
+        const currentHash = window.location.hash.replace("#/", "");
+        if (currentHash === "login" || currentPage === "login") {
+          const targetPage = role === "official" ? "official" : "dashboard";
+          handleNavigateDirect(targetPage, appUser);
+        }
       } else {
         // Clear session only if it was a Firebase user (has uid)
         const savedUserJSON = localStorage.getItem("civic_sense_user");
@@ -83,28 +111,41 @@ export default function App() {
     });
 
     return () => unsubscribe();
+  }, [currentPage]);
+
+  // Listen for developer persona switching
+  useEffect(() => {
+    const handleSwitchPersona = async (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { type, role } = customEvent.detail || {};
+      if (type === "switch-persona") {
+        try {
+          await logOut();
+        } catch (err) {
+          console.error("Error signing out during persona switch:", err);
+        }
+        setCurrentUser(null);
+        localStorage.removeItem("civic_sense_user");
+        
+        if (role === "citizen" || role === "official") {
+          localStorage.setItem("civic_sense_preselected_role", role);
+        }
+        handleNavigateDirect("login", null);
+      }
+    };
+
+    window.addEventListener("dev-action", handleSwitchPersona);
+    return () => window.removeEventListener("dev-action", handleSwitchPersona);
   }, []);
 
   // Protect Dashboard and Report Routes automatically on state or page changes
   useEffect(() => {
     if (!authLoading) {
       if ((currentPage === "dashboard" || currentPage === "report" || currentPage === "official") && !currentUser) {
-        setCurrentPage("login");
-        window.location.hash = "#/login";
+        handleNavigateDirect("login", null);
       }
     }
   }, [currentPage, currentUser, authLoading]);
-
-  // Update hash when page state changes to keep developer URL neat
-  const handleNavigate = (page: string) => {
-    let targetPage = page;
-    if ((page === "dashboard" || page === "report" || page === "official") && !currentUser) {
-      targetPage = "login";
-    }
-    setCurrentPage(targetPage);
-    window.location.hash = `#/${targetPage}`;
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
@@ -122,18 +163,6 @@ export default function App() {
     handleNavigate("landing");
   };
 
-  const handleLoginAsGuest = (role: "citizen" | "official") => {
-    const mockUser: User = {
-      email: role === "official" ? "official@civicsense.gov" : "sasankkonduru@gmail.com",
-      name: role === "official" ? "City Dispatch Director" : "Sasank Konduru",
-      role: role,
-      picture: role === "official"
-        ? "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150"
-        : "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150"
-    };
-    handleLogin(mockUser);
-    handleNavigate(role === "official" ? "official" : "dashboard");
-  };
 
   if (authLoading) {
     return (
@@ -168,7 +197,6 @@ export default function App() {
           <motion.div key="landing" variants={pageVariants} initial="initial" animate="animate" exit="exit">
             <LandingPage 
               onNavigate={handleNavigate} 
-              onLoginAsGuest={handleLoginAsGuest} 
             />
           </motion.div>
         )}
@@ -179,6 +207,7 @@ export default function App() {
               onLogin={handleLogin} 
               onNavigate={handleNavigate} 
               userEmail="sasankkonduru@gmail.com" 
+              currentUser={currentUser}
             />
           </motion.div>
         )}
@@ -212,6 +241,7 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
     </div>
   );
 }

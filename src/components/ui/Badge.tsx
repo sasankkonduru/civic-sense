@@ -76,8 +76,9 @@ export function getStatusVariant(status: string | undefined): "brand" | "info" |
   if (normalized === "submitted" || normalized === "reported") return "brand";
   if (normalized === "assigned" || normalized === "under review") return "info";
   if (normalized === "in progress") return "medium";
-  if (normalized === "resolved") return "brand"; // Resolved starts verification
-  if (normalized === "ai verification" || normalized === "resolved (pending ai verification)") return "critical";
+  if (normalized === "resolved" || normalized === "resolved (pending verification)") return "brand";
+  if (normalized === "needs rework") return "critical";
+  if (normalized === "awaiting evidence") return "info";
   if (normalized === "verified & closed" || normalized === "closed") return "success";
   return "default";
 }

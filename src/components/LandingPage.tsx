@@ -15,7 +15,6 @@ import Badge from "./ui/Badge";
 
 interface LandingPageProps {
   onNavigate: (page: string) => void;
-  onLoginAsGuest: (role: "citizen" | "official") => void;
 }
 
 // Viewport-aware Animated Number Counter
@@ -169,7 +168,7 @@ function AINetworkBackground() {
   );
 }
 
-export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageProps) {
+export default function LandingPage({ onNavigate }: LandingPageProps) {
   const shouldReduceMotion = useReducedMotion();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -237,10 +236,9 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
     ? Math.round((totalTimeMs / resolvedCount) / (1000 * 60 * 60)) 
     : 24;
 
-  const auditedIssues = issues.filter((i) => i.resolutionVerification?.confidenceScore);
-  const aiAccuracy = auditedIssues.length > 0
-    ? Math.round(auditedIssues.reduce((sum, curr) => sum + (curr.resolutionVerification?.confidenceScore || 0), 0) / auditedIssues.length * 10) / 10
-    : 98.6;
+  const aiTriageRate = totalIssues > 0
+    ? Math.round((issues.filter(i => i.aiAnalysis).length / totalIssues) * 100)
+    : 100;
 
   // Timeline Steps
   const timelineSteps = [
@@ -381,7 +379,7 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
                   transition={{ duration: 0.6, delay: 0.2 }}
                   className="text-slate-400 text-sm sm:text-base max-w-xl leading-relaxed font-semibold"
                 >
-                  Empowering citizens and municipal departments to collaborate on public repairs. Citizens file photo reports of local hazards, which our multimodal Gemini Vision engine triages, classifies, and automatically verifies upon completion.
+                  Empowering citizens and municipal departments to collaborate on public repairs. Citizens file photo reports of local issues, which our multimodal Gemini Vision engine triages, classifies, and automatically verifies upon completion.
                 </motion.p>
               </div>
 
@@ -490,26 +488,6 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
                         "Priority Index set to <span className="text-indigo-300">Level 2 (High)</span>. Pre-dispatch crew manifests created containing asphalt patching toolkits and sandbags."
                       </p>
                     </div>
-                  </div>
-
-                  {/* Guest login desk */}
-                  <div className="grid grid-cols-2 gap-3.5 pt-1">
-                    <Button
-                      onClick={() => onLoginAsGuest("citizen")}
-                      variant="secondary"
-                      size="sm"
-                      className="rounded-xl justify-center font-bold"
-                    >
-                      Citizen Guest
-                    </Button>
-                    <Button
-                      onClick={() => onLoginAsGuest("official")}
-                      variant="primary"
-                      size="sm"
-                      className="rounded-xl justify-center font-bold"
-                    >
-                      Official Guest
-                    </Button>
                   </div>
                 </Card>
               </motion.div>
@@ -624,7 +602,7 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
               </Card>
             </motion.div>
 
-            {/* KPI 5: AI Accuracy */}
+            {/* KPI 5: AI Triage Rate */}
             <motion.div whileHover={{ y: -4 }} className="h-full">
               <Card variant="interactive" className="p-6 relative group h-full bg-slate-900/10 border-slate-900">
                 <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-105 transition-transform">
@@ -634,11 +612,11 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
                   <span className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                     <Brain className="w-4 h-4" />
                   </span>
-                  <span className="text-[10px] font-bold text-slate-455 uppercase tracking-widest font-mono">AI Accuracy</span>
+                  <span className="text-[10px] font-bold text-slate-455 uppercase tracking-widest font-mono">AI Triage Rate</span>
                 </div>
                 <div className="flex items-baseline space-x-1">
                   <span className="text-3xl font-black text-white tracking-tight">
-                    {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={aiAccuracy} postfix="%" />}
+                    {loading ? <span className="animate-pulse">...</span> : <AnimatedNumber value={aiTriageRate} postfix="%" />}
                   </span>
                   <span className="text-[9px] font-extrabold text-cyan-400 bg-cyan-950/20 px-1.5 py-0.5 rounded border border-cyan-900/30 font-mono uppercase">
                     Gemini Core
@@ -725,7 +703,7 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
                 <div className="space-y-2">
                   <h3 className="text-lg font-black text-white">Live Infrastructure Map</h3>
                   <p className="text-slate-400 text-xs sm:text-sm leading-relaxed font-medium">
-                    Interactive OpenStreetMap configurations overlay coordinates and active hazard clusters directly, mapping repair routes and localized municipal centers.
+                    Interactive OpenStreetMap configurations overlay coordinates and active issue clusters directly, mapping repair routes and localized municipal centers.
                   </p>
                 </div>
               </Card>
@@ -925,7 +903,7 @@ export default function LandingPage({ onNavigate, onLoginAsGuest }: LandingPageP
               Connect Your Neighborhood to the Grid
             </h2>
             <p className="text-slate-400 max-w-xl mx-auto text-xs sm:text-sm leading-relaxed font-semibold">
-              Report local infrastructure hazards in seconds, explore geocoded regional maps, and track AI-validated resolution audits.
+              Report local infrastructure issues in seconds, explore geocoded regional maps, and track AI-validated resolution audits.
             </p>
           </div>
 

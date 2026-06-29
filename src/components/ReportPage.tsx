@@ -3,7 +3,7 @@ import {
   Upload, MapPin, Sparkles, Brain, AlertTriangle, ArrowLeft, 
   Image as ImageIcon, FileText, X, Check,
   Trash2, Droplets, Lightbulb, Hammer, AlertCircle, ShieldCheck,
-  Camera, Eye, RefreshCw, FileImage
+  Camera, Eye, RefreshCw, FileImage, Activity
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Issue } from "../types";
@@ -14,6 +14,8 @@ import Button from "./ui/Button";
 import Badge, { getSeverityVariant } from "./ui/Badge";
 import { Card } from "./ui/Card";
 import { Input, TextArea } from "./ui/Input";
+import { AINetworkBackground } from "./ui/AINetworkBackground";
+import Modal from "./ui/Modal";
 
 interface ReportPageProps {
   onNavigate: (page: string) => void;
@@ -21,20 +23,26 @@ interface ReportPageProps {
 }
 
 function getTemplateIcon(category: string) {
-  switch (category) {
-    case "Pothole":
-      return <AlertTriangle className="w-8 h-8 text-rose-455 shrink-0" />;
-    case "Garbage":
-      return <Trash2 className="w-8 h-8 text-amber-500 shrink-0" />;
-    case "Water Leakage":
-      return <Droplets className="w-8 h-8 text-sky-400 shrink-0" />;
-    case "Broken Streetlight":
-      return <Lightbulb className="w-8 h-8 text-indigo-400 shrink-0" />;
-    case "Road Damage":
-      return <Hammer className="w-8 h-8 text-orange-400 shrink-0" />;
-    default:
-      return <FileText className="w-8 h-8 text-slate-400 shrink-0" />;
+  const norm = category.toLowerCase();
+  if (norm.includes("road") || norm.includes("pothole")) {
+    return <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />;
   }
+  if (norm.includes("light") || norm.includes("electricity") || norm.includes("streetlight")) {
+    return <Lightbulb className="w-5 h-5 text-indigo-400 shrink-0" />;
+  }
+  if (norm.includes("garbage") || norm.includes("waste") || norm.includes("sanitation")) {
+    return <Trash2 className="w-5 h-5 text-amber-500 shrink-0" />;
+  }
+  if (norm.includes("water") || norm.includes("leak") || norm.includes("drainage") || norm.includes("sewage")) {
+    return <Droplets className="w-5 h-5 text-sky-400 shrink-0" />;
+  }
+  if (norm.includes("traffic") || norm.includes("transit") || norm.includes("signal")) {
+    return <Activity className="w-5 h-5 text-emerald-500 shrink-0" />;
+  }
+  if (norm.includes("park") || norm.includes("tree")) {
+    return <Hammer className="w-5 h-5 text-orange-400 shrink-0" />;
+  }
+  return <FileText className="w-5 h-5 text-slate-400 shrink-0" />;
 }
 
 export default function ReportPage({ onNavigate, currentUser }: ReportPageProps) {
@@ -59,6 +67,11 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
   const [localImageFallbackUsed, setLocalImageFallbackUsed] = useState(() => !isStorageConfigured());
   
   const [isDragging, setIsDragging] = useState(false);
+  const [activeTemplate, setActiveTemplate] = useState<any | null>(null);
+  const [isSampleDemoImage, setIsSampleDemoImage] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submissionStage, setSubmissionStage] = useState<"idle" | "upload" | "analyze" | "duplicates" | "create">("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -77,83 +90,83 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
   const [supportedIssueSuccess, setSupportedIssueSuccess] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  // Ready-made templates to pre-fill hazard info with fixed local JPG assets
   const templates = [
     {
       name: "Pothole",
       title: "Severe Asphalt Pothole on Jubilee Hills Rd",
-      description: "Large structural pothole at the main turn on Road No. 36. Defect forces cars to swerve suddenly, introducing severe roadway safety risks.",
-      category: "Pothole",
+      description: "Large structural pothole causing roadway safety risks. Forces cars to swerve suddenly.",
+      category: "Road Damage",
       severity: "Critical" as const,
-      status: "Reported",
       priority: 3,
       priorityLevel: "Critical" as const,
       priorityScore: 88,
       location: "Road No. 36, Jubilee Hills, Hyderabad, Telangana",
       latitude: 17.4325,
       longitude: 78.4069,
-      imageUrl: "/demo-images/pothole.jpg"
-    },
-    {
-      name: "Garbage Pile",
-      title: "Overflowing Street Sidewalk Garbage Dumpster",
-      description: "Overflowing commercial trash bins spreading onto the pedestrian footpath, attracting stray dogs and generating unhygienic conditions.",
-      category: "Garbage",
-      severity: "Medium" as const,
-      status: "Submitted",
-      priority: 4,
-      priorityLevel: "Medium" as const,
-      priorityScore: 54,
-      location: "Indiranagar 100 Feet Rd, Bengaluru, Karnataka",
-      latitude: 12.9716,
-      longitude: 77.6412,
-      imageUrl: "/demo-images/garbage.jpg"
-    },
-    {
-      name: "Water Leakage",
-      title: "Burst Utility Pipe Flooding Sidewalk",
-      description: "Potable main water line crack leaking heavily onto public lanes. Water accumulates, causing subgrade structural washouts.",
-      category: "Water Leakage",
-      severity: "High" as const,
-      status: "Submitted",
-      priority: 2,
-      priorityLevel: "High" as const,
-      priorityScore: 78,
-      location: "T. Nagar Main Road, Chennai, Tamil Nadu",
-      latitude: 13.0405,
-      longitude: 80.2337,
-      imageUrl: "/demo-images/water-leak.jpg"
+      imageUrl: "/demo-images/pothole.jpg",
+      time: "10 sec"
     },
     {
       name: "Broken Streetlight",
       title: "Non-functional Residential Intersection Streetlight",
-      description: "Broken lamp bulb on main residential curve, creating a blackout hazard at night that diminishes safety and visual coverage.",
+      description: "Broken streetlight lamp at residential corner, causing blackout hazard at night.",
       category: "Broken Streetlight",
       severity: "Low" as const,
-      status: "Reported",
       priority: 5,
       priorityLevel: "Low" as const,
       priorityScore: 32,
       location: "Link Road, Andheri West, Mumbai, Maharashtra",
       latitude: 19.1197,
       longitude: 72.8468,
-      imageUrl: "/demo-images/streetlight.jpg"
+      imageUrl: "/demo-images/streetlight.jpg",
+      time: "10 sec"
     },
     {
-      name: "Road Damage",
-      title: "Deep Roadway Fissure Cracks",
-      description: "Severe asphalt cracks expanding due to heavy vehicle traffic. Hazard threatens structural integrity of local roadway and could damage vehicles.",
+      name: "Garbage Overflow",
+      title: "Overflowing Street Sidewalk Garbage Dumpster",
+      description: "Overflowing commercial trash bins spreading onto the pedestrian footpath, attracting stray dogs.",
+      category: "Garbage",
+      severity: "Medium" as const,
+      priority: 4,
+      priorityLevel: "Medium" as const,
+      priorityScore: 54,
+      location: "Indiranagar 100 Feet Rd, Bengaluru, Karnataka",
+      latitude: 12.9716,
+      longitude: 77.6412,
+      imageUrl: "/demo-images/garbage.jpg",
+      time: "10 sec"
+    },
+    {
+      name: "Water Leakage",
+      title: "Burst Utility Pipe Flooding Sidewalk",
+      description: "Potable main water line crack leaking heavily onto public lanes and causing subgrade washout.",
+      category: "Water Leakage",
+      severity: "High" as const,
+      priority: 2,
+      priorityLevel: "High" as const,
+      priorityScore: 78,
+      location: "T. Nagar Main Road, Chennai, Tamil Nadu",
+      latitude: 13.0405,
+      longitude: 80.2337,
+      imageUrl: "/demo-images/water-leak.jpg",
+      time: "10 sec"
+    },
+    {
+      name: "Fallen Tree",
+      title: "Storm Damaged Tree Limbs Obstructing Lane",
+      description: "Heavy branch snapped onto the right traffic lane, blocking safe vehicle passage.",
       category: "Road Damage",
       severity: "High" as const,
-      status: "Reported",
       priority: 3,
       priorityLevel: "High" as const,
-      priorityScore: 68,
-      location: "Connaught Place, New Delhi",
-      latitude: 28.6304,
-      longitude: 77.2177,
-      imageUrl: "/demo-images/road-damage.jpg"
+      priorityScore: 71,
+      location: "Jayanagar 4th Block, Bengaluru, Karnataka",
+      latitude: 12.9279,
+      longitude: 77.5908,
+      imageUrl: "/demo-images/fallen-tree.png",
+      time: "10 sec"
     }
   ];
 
@@ -254,7 +267,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
           confidenceScore: data.confidenceScore || 85
         });
 
-        setTitle(`AI Detected: ${data.category} Hazard`);
+        setTitle(`AI Detected: ${data.category} Issue`);
         setDescription(`Automated inspection reports a ${data.severity.toLowerCase()} severity ${data.category.toLowerCase()} defect. Details: ${data.explanation}`);
       } else {
         throw new Error("AI analysis request failed");
@@ -277,6 +290,12 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      processImageFile(e.target.files[0]);
+    }
+  };
+
+  const handleCameraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       processImageFile(e.target.files[0]);
     }
@@ -307,34 +326,134 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
     setPreviewsAIAnalysis(null);
     setTitle("");
     setDescription("");
+    setActiveTemplate(null);
+    setIsSampleDemoImage(false);
   };
 
-  // Pre-fill a demo hazard template with local JPG asset preloading and Base64 fetch conversion
-  const handleLoadTemplate = async (tpl: typeof templates[0]) => {
+  const startCamera = async () => {
+    setIsCameraActive(true);
+    setCameraError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" }
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err: any) {
+      console.error("Camera access failed:", err);
+      setCameraError("Camera access denied or unavailable. Gracefully falling back to file upload.");
+      setIsCameraActive(false);
+      // Auto fallback trigger:
+      fileInputRef.current?.click();
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const video = videoRef.current;
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const b64 = canvas.toDataURL("image/jpeg");
+        setImageUrl(b64);
+        setImageBase64(b64);
+        setIsSampleDemoImage(false);
+        setImageMetadata({
+          name: `camera_capture_${Date.now()}.jpg`,
+          size: `${Math.round((b64.length * 3) / 4 / 1024)} KB`,
+          type: "JPG"
+        });
+        triggerLiveAIAnalysis(b64);
+      }
+      stopCamera();
+    }
+  };
+
+  const handleGenerateSampleImage = async () => {
+    if (!activeTemplate) return;
     try {
       setAnalyzingImage(true);
+      setErrorMessage("");
+      
+      const tpl = activeTemplate;
+      setImageUrl(tpl.imageUrl);
+      setIsSampleDemoImage(true);
+
+      let b64 = "";
+      try {
+        const response = await fetch(tpl.imageUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          const p = new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          b64 = await p;
+        }
+      } catch (e) {
+        console.warn("Failed to fetch template image, generating fallback base64 image pattern", e);
+      }
+
+      if (!b64) {
+        b64 = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100%' height='100%' fill='%231e293b'/><text x='50%' y='50%' font-family='sans-serif' font-size='10' fill='%2364748b' dominant-baseline='middle' text-anchor='middle'>Template Preset</text></svg>";
+        setImageUrl(b64);
+      }
+
+      setImageBase64(b64);
+
+      setImageMetadata({
+        name: `${tpl.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}_template.jpg`,
+        size: "1.1 MB",
+        type: "JPG"
+      });
+
+      setPreviewsAIAnalysis({
+        category: tpl.category,
+        severity: tpl.severity,
+        priority: tpl.priority,
+        explanation: `Loaded prefilled template: ${tpl.name}. AI confirmed category and severity matching historical logs.`,
+        recommendedAction: "Dispatch standard municipal crew with template toolkit.",
+        estimatedCost: "$250 - $500",
+        confidenceScore: 100
+      });
+    } catch (e) {
+      console.error("Failed to generate sample image:", e);
+      setErrorMessage("Could not generate sample image correctly.");
+    } finally {
+      setAnalyzingImage(false);
+    }
+  };
+
+  // Pre-fill a demo hazard template with deferred sample image generation compatibility
+  const handleLoadTemplate = async (tpl: typeof templates[0]) => {
+    try {
       setErrorMessage("");
       setTitle(tpl.title);
       setDescription(tpl.description);
       setLocation(tpl.location);
       setLatitude(tpl.latitude);
       setLongitude(tpl.longitude);
-      setImageUrl(tpl.imageUrl);
-      setImageLoadError(false);
+      setActiveTemplate(tpl);
 
-      const response = await fetch(tpl.imageUrl);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const b64 = reader.result as string;
-        setImageBase64(b64);
-
-        setImageMetadata({
-          name: `${tpl.category.toLowerCase()}_template.jpg`,
-          size: "1.1 MB",
-          type: "JPG"
-        });
-
+      if (!imageUrl) {
+        setImageUrl("");
+        setImageBase64("");
+        setImageMetadata(null);
+        setIsSampleDemoImage(false);
         setPreviewsAIAnalysis({
           category: tpl.category,
           severity: tpl.severity,
@@ -344,13 +463,14 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
           estimatedCost: "$250 - $500",
           confidenceScore: 100
         });
-      };
-      reader.readAsDataURL(blob);
-
-      setCurrentStep(1);
+        setCurrentStep(1);
+      } else {
+        setIsSampleDemoImage(false);
+        setCurrentStep(1);
+      }
     } catch (e) {
-      console.error("Failed to preload template JPG:", e);
-      setErrorMessage("Could not load template image correctly. Please upload manually.");
+      console.error("Failed to preload template:", e);
+      setErrorMessage("Could not load template correctly. Please report manually.");
     } finally {
       setAnalyzingImage(false);
     }
@@ -359,6 +479,11 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
   // Submit flow
   const handleSubmit = async (e: React.FormEvent) => {
     if (e && e.preventDefault) e.preventDefault();
+    
+    if (!imageUrl) {
+      setErrorMessage("Validation Error: An issue photograph is required. Please upload an image, capture one with your camera, or generate a demo sample image.");
+      return;
+    }
     
     if (!title || !description || !location) {
       setErrorMessage("Input validation error: Please fill all required fields before proceeding.");
@@ -471,7 +596,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
       }
 
       setSupportedIssueSuccess(issueId);
-      setSuccessIssue({ id: issueId, title: "Supported Existing Hazard" });
+      setSuccessIssue({ id: issueId, title: "Supported Existing Issue" });
     } catch (err: any) {
       setErrorMessage(err.message || "Error supporting existing ticket.");
     } finally {
@@ -482,6 +607,9 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
 
   return (
     <div id="report-page" className="min-h-screen bg-slate-955 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-16 relative overflow-hidden">
+      
+      {/* Smart City Network Animation Background */}
+      <AINetworkBackground />
       
       {/* Background glow overlay */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/5 rounded-full blur-[100px] -z-10 pointer-events-none" />
@@ -632,10 +760,10 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                       <span className="text-slate-500 font-bold uppercase">Severity</span>
                       <Badge variant={getSeverityVariant(successIssue.severity)}>{successIssue.severity}</Badge>
                     </div>
-                    {successIssue.aiAnalysis?.estimatedCost && (
+                    {successIssue.aiAnalysis?.priority && (
                       <div className="flex justify-between">
-                        <span className="text-slate-500 font-bold uppercase">Estimated Cost</span>
-                        <span className="text-indigo-405 font-bold">{successIssue.aiAnalysis.estimatedCost}</span>
+                        <span className="text-slate-500 font-bold uppercase">Priority Code</span>
+                        <span className="text-indigo-405 font-bold">P-{successIssue.aiAnalysis.priority}</span>
                       </div>
                     )}
                   </div>
@@ -685,7 +813,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                   <div>
                     <h2 className="text-lg font-black tracking-tight text-white">Potential Duplicate Detected ({duplicateCheckResult.duplicateProbability}% Match)</h2>
                     <p className="text-xs text-amber-400 mt-0.5 font-bold uppercase tracking-wider font-mono">
-                      An extremely similar hazard has already been reported nearby.
+                      An extremely similar issue has already been reported nearby.
                     </p>
                   </div>
                 </div>
@@ -775,7 +903,6 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
               </Card>
             </motion.div>
           ) : (
-            /* WIZARD FLOW W/ FRAMER MOTION TRANSITIONS */
             <motion.div
               key={`step-${currentStep}`}
               initial={{ opacity: 0, x: 20 }}
@@ -785,6 +912,48 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
               className="space-y-6"
             >
               
+              {/* Quick Report Templates section above the report form */}
+              {currentStep === 0 && !submitting && (
+                <div className="space-y-4 mb-2">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-black text-white tracking-tight">Quick Report Templates</h2>
+                    <p className="text-xs text-slate-400">
+                      Start with a realistic municipal issue and customize it before submitting.
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
+                    {templates.map((tpl) => (
+                      <Card
+                        key={tpl.name}
+                        variant="interactive"
+                        onClick={() => handleLoadTemplate(tpl)}
+                        className="p-4 flex flex-col justify-between space-y-4 hover:border-indigo-500/40 hover:-translate-y-1 duration-300 cursor-pointer animate-fade-in"
+                      >
+                        <div className="space-y-3">
+                          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                            {getTemplateIcon(tpl.category)}
+                          </div>
+                          <div>
+                            <h4 className="font-extrabold text-xs text-white tracking-tight group-hover:text-indigo-400 transition-colors leading-tight">
+                              {tpl.name}
+                            </h4>
+                            <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed line-clamp-2">
+                              {tpl.description}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="pt-3.5 border-t border-slate-900/60 flex items-center justify-between text-[9px] text-slate-500 font-bold uppercase font-mono">
+                          <span>⏱️ {tpl.time}</span>
+                          <span className="text-indigo-400 font-extrabold">Prefill ⚡</span>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Form card */}
               <Card variant="default">
                 
@@ -817,7 +986,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                       <h3 className="text-lg font-black text-white tracking-tight">
                         {submissionStage === "upload" && "Uploading Photo..."}
                         {submissionStage === "analyze" && "Analyzing Image with Gemini..."}
-                        {submissionStage === "duplicates" && "Checking Duplicate Hazards..."}
+                        {submissionStage === "duplicates" && "Checking Duplicate Issues..."}
                         {submissionStage === "create" && "Generating Dispatch Ticket..."}
                       </h3>
                       <p className="text-xs text-slate-405 font-semibold leading-relaxed font-mono">
@@ -909,7 +1078,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
 
                         {/* Real-Time Vision pre-analysis panel Overhauled as ChatGPT Assistant Card */}
                         {(analyzingImage || previewsAIAnalysis) && (
-                          <div className="bg-slate-950 border border-indigo-500/15 rounded-2xl p-5 space-y-4 shadow-xl">
+                          <Card variant="ai" className="p-5 space-y-4 shadow-xl relative overflow-hidden">
                             <div className="flex items-center justify-between border-b border-slate-900/80 pb-3">
                               <div className="flex items-center space-x-2.5">
                                 <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
@@ -962,9 +1131,9 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                                     </span>
                                   </div>
                                   <div className="bg-slate-900/60 border border-slate-900 p-2.5 rounded-xl">
-                                    <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block font-mono">Estimated Cost</span>
+                                    <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block font-mono">Priority Code</span>
                                     <span className="font-extrabold text-indigo-400 block mt-0.5">
-                                      {previewsAIAnalysis.estimatedCost || "$150 - $400"}
+                                      P-{previewsAIAnalysis.priority}
                                     </span>
                                   </div>
                                 </div>
@@ -994,7 +1163,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                                 </button>
                               </div>
                             )}
-                          </div>
+                          </Card>
                         )}
 
                         <div className="flex justify-end pt-2">
@@ -1016,7 +1185,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                           onDragLeave={handleDragLeave}
                           onDrop={handleDrop}
                           onClick={() => fileInputRef.current?.click()}
-                          className={`border-2 border-dashed rounded-3xl p-12 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center min-h-[260px] relative overflow-hidden group ${
+                          className={`border-2 border-dashed rounded-3xl p-12 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center min-h-[220px] relative overflow-hidden group ${
                             isDragging
                               ? "border-indigo-500 bg-indigo-950/20 scale-[0.99] shadow-lg shadow-indigo-500/10"
                               : "border-slate-800 bg-slate-950/30 hover:border-indigo-500/50 hover:bg-slate-950/50"
@@ -1045,51 +1214,37 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                             </p>
                             <p className="text-xs text-slate-505 font-semibold font-mono">PNG, JPG, WEBP formats supported (up to 10MB)</p>
                           </div>
-                          <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleFileChange}
-                            accept="image/*"
-                            className="hidden"
-                          />
                         </div>
 
-                        {/* Large Category templates selection cards */}
-                        <div className="space-y-3 pt-3">
-                          <span className="text-xs font-bold text-slate-550 uppercase tracking-wider block font-mono">
-                            Or Pre-Fill Demo Incident Template:
-                          </span>
-                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                            {templates.map(tpl => (
-                              <div
-                                key={tpl.name}
-                                id={`template-${tpl.name.toLowerCase().replace(" ", "-")}`}
-                                onClick={() => handleLoadTemplate(tpl)}
-                                className="group cursor-pointer bg-slate-900/40 rounded-2xl border border-slate-900 overflow-hidden hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-950/5 hover:-translate-y-1 transition-all duration-300 flex flex-col h-full"
-                              >
-                                <div className="h-24 bg-slate-950 border-b border-slate-900 flex items-center justify-center p-4 bg-gradient-to-b from-slate-950 to-slate-900">
-                                  {getTemplateIcon(tpl.category)}
-                                </div>
-                                
-                                <div className="p-4 flex flex-col flex-grow justify-between space-y-2">
-                                  <div className="space-y-1">
-                                    <span className="font-extrabold text-sm text-slate-205 group-hover:text-indigo-400 transition-colors block leading-tight">
-                                      {tpl.name}
-                                    </span>
-                                    <Badge variant={getSeverityVariant(tpl.severity)}>
-                                      {tpl.severity}
-                                    </Badge>
-                                  </div>
-                                  
-                                  <div className="pt-2 border-t border-slate-900/60 flex items-center justify-between text-[9px] text-slate-550 font-bold uppercase font-mono">
-                                    <span>📍 Local</span>
-                                    <span className="text-indigo-400 font-extrabold">Prefill ⚡</span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                        {/* Extra Actions Grid */}
+                        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+                          <Button
+                            type="button"
+                            onClick={startCamera}
+                            variant="secondary"
+                            className="w-full sm:w-auto rounded-2xl py-3 px-6 text-xs font-bold border border-slate-800 hover:bg-slate-900"
+                            leftIcon={<Camera className="w-4 h-4 text-indigo-405" />}
+                          >
+                            Use Device Camera
+                          </Button>
+
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              setImageUrl("");
+                              setImageBase64("");
+                              setImageFile(null);
+                              setPreviewsAIAnalysis(null);
+                              setCurrentStep(1);
+                            }}
+                            variant="ghost"
+                            className="w-full sm:w-auto text-slate-400 hover:text-white"
+                          >
+                            Continue without Image (Optional) &rarr;
+                          </Button>
                         </div>
+
+
 
                       </div>
                     )}
@@ -1100,11 +1255,117 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                 {!submitting && currentStep === 1 && (
                   <div className="p-6 space-y-6">
                     <div className="space-y-1">
-                      <span className="text-xs font-bold text-indigo-400 tracking-wider uppercase font-mono">Step 2: Hazard Details</span>
+                      <span className="text-xs font-bold text-indigo-400 tracking-wider uppercase font-mono">Step 2: Issue Details</span>
                       <h2 className="text-base font-extrabold text-white">Provide Incident Description</h2>
                     </div>
 
                     <div className="space-y-4">
+                      {/* Dynamic Image Management Card */}
+                      <Card variant="glass" className="p-4 space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-900 pb-2">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-1">
+                            <ImageIcon className="w-3.5 h-3.5 text-indigo-405" /> Evidence Media
+                          </span>
+                          {imageUrl && (
+                            <Badge variant="brand" className="font-mono text-[9px]">PREVIEWING</Badge>
+                          )}
+                        </div>
+
+                        {imageUrl ? (
+                          <div className="space-y-3">
+                            <div className="relative rounded-2xl overflow-hidden aspect-video max-h-40 bg-slate-900 border border-slate-900 flex items-center justify-center">
+                              {imageLoadError ? (
+                                <div className="h-full w-full bg-slate-900 flex flex-col items-center justify-center p-4">
+                                  <AlertCircle className="w-8 h-8 text-slate-550 mb-2 animate-bounce" />
+                                  <span className="font-bold text-xs text-slate-405 font-mono">Preset Illustration Loaded</span>
+                                </div>
+                              ) : (
+                                <img src={imageUrl} alt="Triage preview" className="w-full h-full object-cover" onError={() => setImageLoadError(true)} />
+                              )}
+                              
+                              {/* Sample Demo Image Flag Label Overlay */}
+                              {isSampleDemoImage && (
+                                <div className="absolute top-2 left-2 bg-indigo-950/90 border border-indigo-500/35 px-2.5 py-1 rounded-xl text-[9px] font-extrabold text-indigo-400 uppercase tracking-widest font-mono shadow-md">
+                                  Sample Demonstration Image
+                                </div>
+                              )}
+                              
+                              <button
+                                type="button"
+                                onClick={handleRemoveImage}
+                                className="absolute top-2.5 right-2.5 p-1.5 bg-slate-955/80 hover:bg-slate-950 text-white rounded-full transition-transform cursor-pointer"
+                                title="Remove image"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                variant="secondary"
+                                size="sm"
+                                className="text-xs rounded-xl"
+                              >
+                                Replace Image
+                              </Button>
+                              <Button
+                                type="button"
+                                onClick={startCamera}
+                                variant="secondary"
+                                size="sm"
+                                className="text-xs rounded-xl"
+                                leftIcon={<Camera className="w-3.5 h-3.5 text-indigo-400" />}
+                              >
+                                Capture Photo
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="border border-dashed border-slate-800 rounded-2xl p-5 text-center bg-slate-955/35 space-y-1">
+                              <p className="text-xs font-bold text-slate-350">No evidence photo uploaded (Required)</p>
+                              <p className="text-[10.5px] text-slate-455 leading-relaxed font-semibold">
+                                An issue photograph is required to file a report. Please upload an image, capture one with your camera, or generate a demo sample image.
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                variant="primary"
+                                size="sm"
+                                className="text-xs rounded-xl"
+                              >
+                                Upload Image
+                              </Button>
+                              <Button
+                                type="button"
+                                onClick={startCamera}
+                                variant="secondary"
+                                size="sm"
+                                className="text-xs rounded-xl"
+                                leftIcon={<Camera className="w-3.5 h-3.5 text-indigo-400" />}
+                              >
+                                Capture Photo
+                              </Button>
+                              {activeTemplate && (
+                                <Button
+                                  type="button"
+                                  onClick={handleGenerateSampleImage}
+                                  variant="secondary"
+                                  size="sm"
+                                  className="text-xs rounded-xl border border-indigo-500/25 hover:border-indigo-500/50 hover:bg-indigo-950/20 text-indigo-405 font-extrabold"
+                                  leftIcon={<Sparkles className="w-3.5 h-3.5 text-indigo-405" />}
+                                >
+                                  Generate Sample Issue Image
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </Card>
+
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block font-mono">GPS Coordinates & Address</label>
                         <div className="flex gap-2">
@@ -1138,7 +1399,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
 
                       <Input
                         label="Report Title"
-                        placeholder="e.g. Hazardous Water Main Leak near corner intersection"
+                        placeholder="e.g. Burst Water Main Leak near corner intersection"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         required
@@ -1186,7 +1447,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                     </div>
 
                     {previewsAIAnalysis ? (
-                      <div className="bg-slate-950 border border-indigo-500/15 rounded-3xl p-6 space-y-5 shadow-2xl">
+                      <Card variant="ai" className="p-6 space-y-5 shadow-2xl">
                         
                         {/* ChatGPT avatar header */}
                         <div className="flex items-center justify-between border-b border-slate-900 pb-3.5">
@@ -1218,9 +1479,9 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                               previewsAIAnalysis.severity === "High" ? "text-orange-400" : "text-amber-405"
                             }`}>{previewsAIAnalysis.severity}</span>
                           </div>
-                          <div className="bg-slate-900/60 border border-slate-900 p-2.5 rounded-xl">
-                            <span className="text-[9px] text-slate-550 font-bold uppercase block font-mono">Estimated Cost</span>
-                            <span className="font-extrabold text-indigo-400 mt-1 block">{previewsAIAnalysis.estimatedCost || "$250 - $500"}</span>
+                           <div className="bg-slate-900/60 border border-slate-900 p-2.5 rounded-xl">
+                            <span className="text-[9px] text-slate-550 font-bold uppercase block font-mono">Priority Code</span>
+                            <span className="font-extrabold text-indigo-400 mt-1 block">P-{previewsAIAnalysis.priority}</span>
                           </div>
                         </div>
 
@@ -1242,7 +1503,7 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
                           <span>Priority Code: {previewsAIAnalysis.priority}</span>
                           <span>Audit Lock: {new Date().toLocaleTimeString()}</span>
                         </div>
-                      </div>
+                      </Card>
                     ) : (
                       <div className="py-6 text-center space-y-2 bg-slate-900/30 rounded-2xl border border-slate-900">
                         <Brain className="w-8 h-8 text-slate-600 mx-auto animate-pulse" />
@@ -1274,6 +1535,54 @@ export default function ReportPage({ onNavigate, currentUser }: ReportPageProps)
 
         </AnimatePresence>
       </main>
+
+      {/* Hidden file & camera inputs for global action compatibility */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept="image/*"
+        className="hidden"
+      />
+      <input
+        type="file"
+        ref={cameraInputRef}
+        onChange={handleCameraChange}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+      />
+
+      {/* In-App Interactive Web Camera Modal */}
+      <Modal 
+        isOpen={isCameraActive} 
+        onClose={stopCamera} 
+        title="Capture Incident Evidence"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900 border border-slate-800">
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              className="w-full h-full object-cover"
+            />
+          </div>
+          {cameraError && (
+            <p className="text-xs text-red-400 font-semibold">{cameraError}</p>
+          )}
+          <div className="flex gap-3 justify-end">
+            <Button onClick={stopCamera} variant="secondary" className="rounded-xl">
+              Cancel
+            </Button>
+            <Button onClick={capturePhoto} variant="primary" className="rounded-xl" leftIcon={<Camera className="w-4 h-4" />}>
+              Capture Photo
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

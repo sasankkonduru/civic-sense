@@ -249,27 +249,46 @@ interface IssueMapProps {
   issues: Issue[];
   onSelectIssue?: (issue: Issue) => void;
   selectedIssueId?: string;
+  hideMonitorPanel?: boolean;
 }
 
 export const IssueMap: React.FC<IssueMapProps> = ({
   issues,
   onSelectIssue,
   selectedIssueId,
+  hideMonitorPanel = false,
 }) => {
   const shouldReduceMotion = useReducedMotion();
-  const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]); // Default India
-  const [mapZoom, setMapZoom] = useState<number>(5); // Default wide view for India
+  // Filter issues that have valid coordinates
+  const geocodedIssues = issues.filter(
+    (issue) => typeof issue.latitude === "number" && typeof issue.longitude === "number"
+  );
+
+  const [mapCenter, setMapCenter] = useState<[number, number]>(() => {
+    if (selectedIssueId) {
+      const selected = issues.find((issue) => issue.id === selectedIssueId);
+      if (selected && typeof selected.latitude === "number" && typeof selected.longitude === "number") {
+        return [selected.latitude, selected.longitude];
+      }
+    }
+    if (geocodedIssues.length > 0) {
+      return [geocodedIssues[0].latitude!, geocodedIssues[0].longitude!];
+    }
+    return [17.3850, 78.4069]; // Default Hyderabad
+  });
+
+  const [mapZoom, setMapZoom] = useState<number>(() => {
+    if (selectedIssueId) return 15;
+    if (geocodedIssues.length > 0) return 13;
+    return 12; // Configured city level zoom
+  });
+
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [locateError, setLocateError] = useState<string | null>(null);
 
   const [geocodedCity, setGeocodedCity] = useState<string>("");
   const [localNearestCity, setLocalNearestCity] = useState<string>("");
-
-  // Filter issues that have valid coordinates
-  const geocodedIssues = issues.filter(
-    (issue) => typeof issue.latitude === "number" && typeof issue.longitude === "number"
-  );
 
   // Dynamic grid clustering
   const clusterIssues = (issuesList: Issue[], zoom: number): MapCluster[] => {
@@ -319,9 +338,7 @@ export const IssueMap: React.FC<IssueMapProps> = ({
   // Detect user current location
   const handleLocateUser = () => {
     if (!navigator.geolocation) {
-      setLocateError("Geolocation is not supported by your browser. Centered on India.");
-      setMapCenter([20.5937, 78.9629]);
-      setMapZoom(5);
+      setLocateError("Geolocation is not supported by your browser. Centered on default view.");
       return;
     }
 
@@ -338,18 +355,16 @@ export const IssueMap: React.FC<IssueMapProps> = ({
       },
       (error) => {
         console.error("Error getting location:", error);
-        setLocateError("Location permission denied. Centered on Indian National Grid.");
-        setMapCenter([20.5937, 78.9629]);
-        setMapZoom(5);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocateError("Location access is optional. Centered on default city view.");
+        } else {
+          setLocateError("Could not retrieve your location. Centered on default city view.");
+        }
         setIsLocating(false);
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
   };
-
-  useEffect(() => {
-    handleLocateUser();
-  }, []);
 
   // Recenter map when selectedIssueId changes
   useEffect(() => {
@@ -403,38 +418,81 @@ export const IssueMap: React.FC<IssueMapProps> = ({
     <div className="relative w-full h-full min-h-[350px] bg-slate-950 rounded-3xl overflow-hidden border border-slate-900 shadow-inner group animate-none" id="leaflet-map-wrapper">
       
       {/* Top Left Floating Indicator (City Name & Active Count) */}
-      <motion.div 
-        initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -10, y: -10 }}
-        animate={{ opacity: 1, x: 0, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="absolute top-3 left-3 z-[500] pointer-events-none flex flex-col gap-2 max-w-[280px] sm:max-w-[340px]"
-      >
-        <div className="pointer-events-auto bg-slate-950/85 backdrop-blur-md border border-indigo-500/30 rounded-2xl p-3 shadow-xl flex items-center space-x-3 text-white transition-all duration-300 hover:border-indigo-400/50">
-          <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center shrink-0">
-            <Compass className="w-4.5 h-4.5 text-sky-400 animate-pulse" />
+      {!hideMonitorPanel && (
+        <motion.div 
+          initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -10, y: -10 }}
+          animate={{ opacity: 1, x: 0, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="absolute top-3 left-3 z-[500] flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-[calc(100%-24px)] pointer-events-none"
+        >
+          <div className="pointer-events-auto bg-slate-950/90 backdrop-blur-md border border-indigo-500/30 rounded-2xl p-3 shadow-xl flex flex-col gap-2.5 text-white transition-all duration-300 hover:border-indigo-400/50">
+            <div className="flex items-center space-x-3 border-b border-slate-900/60 pb-2">
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center shrink-0">
+                <Compass className="w-4.5 h-4.5 text-sky-400 animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0 pr-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9px] font-bold text-indigo-305 uppercase tracking-widest leading-none">
+                    MUNICIPAL MONITOR
+                  </span>
+                  <span className="text-[8px] px-1.5 py-0.5 rounded font-mono font-bold leading-none bg-slate-900 border border-slate-800 text-slate-400">
+                    {userLocation ? "📍 Current Location" : "🏢 Default City"}
+                  </span>
+                </div>
+                <h4 className="text-xs font-extrabold text-white truncate mt-1">
+                  {geocodedCity || localNearestCity ? (
+                    <>Viewing <span className="text-sky-400">{geocodedCity || localNearestCity}</span></>
+                  ) : (
+                    "Indian National Grid"
+                  )}
+                </h4>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-bold font-sans">
+              <div className="px-2 py-1 rounded bg-slate-900/60 border border-slate-850 flex flex-col justify-center min-w-[55px]">
+                <span className="text-xs text-white font-mono font-black">
+                  {issues.filter(i => i.status !== "Verified & Closed" && i.status !== "Closed").length}
+                </span>
+                <span className="text-[7.5px] text-slate-400 uppercase tracking-wider font-mono">Active</span>
+              </div>
+              <div className="px-2 py-1 rounded bg-emerald-950/20 border border-emerald-900/20 flex flex-col justify-center min-w-[55px]">
+                <span className="text-xs text-emerald-400 font-mono font-black">
+                  {issues.filter(i => i.status === "Resolved" || i.status === "Verified & Closed" || i.status === "Closed").length}
+                </span>
+                <span className="text-[7.5px] text-emerald-500 uppercase tracking-wider font-mono">Resolved</span>
+              </div>
+              <div className="px-2 py-1 rounded bg-purple-950/20 border border-purple-900/20 flex flex-col justify-center min-w-[55px]">
+                <span className="text-xs text-purple-400 font-mono font-black">
+                  {issues.filter(i => i.status === "Resolved" && !i.resolutionVerification).length}
+                </span>
+                <span className="text-[7.5px] text-purple-500 uppercase tracking-wider font-mono">Audit</span>
+              </div>
+              <div className="px-2 py-1 rounded bg-red-950/20 border border-red-900/20 flex flex-col justify-center min-w-[55px]">
+                <span className="text-xs text-red-400 font-mono font-black">
+                  {issues.filter(i => i.severity === "Critical" || i.severity === "High").length}
+                </span>
+                <span className="text-[7.5px] text-red-500 uppercase tracking-wider font-mono">Priority</span>
+              </div>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest leading-none">
-              MUNICIPAL MONITOR
-            </p>
-            <h4 className="text-xs font-extrabold text-white truncate mt-1">
-              {geocodedCity || localNearestCity ? (
-                <>Viewing <span className="text-sky-400">{geocodedCity || localNearestCity}</span></>
-              ) : (
-                "Indian National Grid"
-              )}
-            </h4>
-          </div>
-          <div className="px-2.5 py-1 rounded-xl bg-indigo-500/20 border border-indigo-500/35 flex flex-col items-center justify-center shrink-0">
-            <span className="text-[12px] font-black text-white leading-none font-mono">
-              {geocodedIssues.length}
-            </span>
-            <span className="text-[7px] font-bold text-indigo-300 uppercase mt-0.5 tracking-wider font-mono">
-              Hazards
-            </span>
-          </div>
-        </div>
-      </motion.div>
+
+          {!userLocation && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleLocateUser();
+              }}
+              disabled={isLocating}
+              className="pointer-events-auto flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-650/90 hover:bg-indigo-700 text-white rounded-2xl text-[10.5px] font-bold shadow-xl border border-indigo-550/20 hover:border-indigo-400/40 active:scale-95 transition-all cursor-pointer h-full self-start sm:self-auto font-sans"
+            >
+              <Locate className={`w-3.5 h-3.5 ${isLocating ? "animate-spin text-indigo-350" : ""}`} />
+              <span>{isLocating ? "Locating..." : "Use My Location"}</span>
+            </button>
+          )}
+        </motion.div>
+      )}
 
       {/* Bottom Left Floating Legend (Critical Red, High Orange, Medium Yellow, Low Green) */}
       <motion.div 
@@ -664,10 +722,10 @@ export const IssueMap: React.FC<IssueMapProps> = ({
                     <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1 font-mono">
                         <Layers className="w-3 h-3 text-indigo-500" />
-                        Hazard Cluster
+                        Issue Cluster
                       </span>
                       <span className="text-[10px] font-black text-indigo-600 bg-indigo-50/80 px-2 py-0.5 rounded-full border border-indigo-100">
-                        {cluster.issues.length} Hazards
+                        {cluster.issues.length} Issues
                       </span>
                     </div>
                     

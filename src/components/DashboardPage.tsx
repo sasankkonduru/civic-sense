@@ -2,22 +2,47 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   AlertTriangle, CheckCircle2, Clock, ShieldAlert, Brain, MapPin, 
   RefreshCw, TrendingUp, Filter, Eye, User, FileText, ChevronRight, Check, AlertCircle, Sparkles,
-  Upload, Timer, ClipboardCheck, Building, Calendar, Activity, Trash2, Droplets, Lightbulb, Hammer, ShieldCheck
+  Upload, Timer, ClipboardCheck, Building, Calendar, Activity, Trash2, Droplets, Lightbulb, Hammer, ShieldCheck, Image as ImageIcon, Info
 } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db, updateFirestoreIssue, uploadBase64ToStorage, seedDemoIssuesIfEmpty, isStorageConfigured, compressBase64Image } from "../firebase";
 import { Issue, AIInsight, DashboardStats, MunicipalInsights, MunicipalDailyBrief } from "../types";
 import { IssueMap } from "./IssueMap";
+import { AINetworkBackground } from "./ui/AINetworkBackground";
 const STAGES = [
   { name: "Reported", value: "Reported" },
   { name: "Assigned", value: "Assigned" },
   { name: "Under Review", value: "Under Review" },
   { name: "In Progress", value: "In Progress" },
   { name: "Resolved", value: "Resolved" },
-  { name: "AI Verified", value: "AI Verification" },
+  { name: "Verified by Municipal Official", value: "AI Verification" },
   { name: "Closed", value: "Verified & Closed" }
 ];
+
+const ImageWithFallback = ({ src, alt, label, onError }: { src: string; alt: string; label: string; onError?: () => void }) => {
+  const [error, setError] = useState(false);
+  if (!src || error) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 border border-slate-800 text-slate-555 p-4 rounded-xl text-center space-y-2 font-sans">
+        <ImageIcon className="w-7 h-7 text-slate-600 shrink-0" />
+        <span className="text-[9px] font-mono font-bold">{label} Image Unavailable</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="w-full h-full object-contain bg-slate-950"
+      referrerPolicy="no-referrer"
+      onError={() => {
+        setError(true);
+        if (onError) onError();
+      }}
+    />
+  );
+};
 
 
 const getStatusStep = (status: string | undefined): number => {
@@ -26,9 +51,9 @@ const getStatusStep = (status: string | undefined): number => {
   if (s === "submitted" || s === "reported") return 0;
   if (s === "assigned") return 1;
   if (s === "under review") return 2;
-  if (s === "in progress") return 3;
-  if (s === "resolved") return 4;
-  if (s === "ai verification" || s === "resolved (pending ai verification)") return 5;
+  if (s === "in progress" || s === "needs rework") return 3;
+  if (s === "resolved" || s === "awaiting evidence") return 4;
+  if (s === "ai verification" || s === "resolved (pending verification)" || s === "resolved (pending ai verification)") return 5;
   if (s === "verified & closed" || s === "closed") return 6;
   return 0;
 };
@@ -158,6 +183,24 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
   const [resolutionError, setResolutionError] = useState("");
   const resolutionFileInputRef = useRef<HTMLInputElement>(null);
   const [localImageFallbackUsed, setLocalImageFallbackUsed] = useState(() => !isStorageConfigured());
+  const [activeTab, setActiveTab] = useState<"overview" | "reports" | "nearby">(() => {
+    const saved = localStorage.getItem("civic_sense_active_tab");
+    if (saved && ["overview", "reports", "nearby"].includes(saved)) {
+      localStorage.removeItem("civic_sense_active_tab");
+      return saved as any;
+    }
+    return "overview";
+  });
+  const [originalImageError, setOriginalImageError] = useState(false);
+  const [repairImageError, setRepairImageError] = useState(false);
+  const [personalFilterStatus, setPersonalFilterStatus] = useState<string>("All");
+  const [showMapResolved, setShowMapResolved] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    setOriginalImageError(false);
+    setRepairImageError(false);
+  }, [selectedIssue?.id]);
 
   // Clear verification state on selection change
   useEffect(() => {
@@ -188,72 +231,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
   };
 
   const handleVerifyResolution = async () => {
-    if (!selectedIssue || !resolutionBase64) return;
-    try {
-      setVerifyingResolution(true);
-      setResolutionError("");
-
-      const response = await fetch("/api/verify-resolution", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: selectedIssue.title,
-          description: selectedIssue.description,
-          originalImageUrl: selectedIssue.imageUrl,
-          resolutionImageBase64: resolutionBase64,
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Failed to verify resolution.");
-      }
-
-      const verificationResult = await response.json();
-      const storagePath = `resolutions/${selectedIssue.id}_${Date.now()}.jpg`;
-      let uploadedUrl = "";
-      try {
-        if (!isStorageConfigured()) {
-          throw new Error("Firebase Storage is not configured.");
-        }
-        uploadedUrl = await uploadBase64ToStorage(resolutionBase64, storagePath);
-      } catch (err) {
-        console.warn("Storage upload failed or unconfigured, falling back to local compressed base64:", err);
-        setLocalImageFallbackUsed(true);
-        uploadedUrl = await compressBase64Image(resolutionBase64);
-      }
-
-      const updatePayload: Partial<Issue> = {
-        resolutionImage: uploadedUrl,
-        resolutionVerification: {
-          status: verificationResult.status,
-          confidenceScore: verificationResult.confidenceScore,
-          explanation: verificationResult.explanation,
-          verifiedAt: new Date().toISOString(),
-        },
-      };
-
-      if (verificationResult.status === "Resolved") {
-        updatePayload.status = "Resolved";
-      } else if (verificationResult.status === "Partially Resolved") {
-        updatePayload.status = "In Progress";
-      }
-
-      await updateFirestoreIssue(selectedIssue.id, updatePayload);
-
-      const updatedIssue = {
-        ...selectedIssue,
-        ...updatePayload,
-      };
-      setSelectedIssue(updatedIssue);
-      setResolutionFile(null);
-      setResolutionBase64("");
-    } catch (err: any) {
-      console.error("Verification failed:", err);
-      setResolutionError(err.message || "An error occurred during verification.");
-    } finally {
-      setVerifyingResolution(false);
-    }
+    // Deprecated in favor of the manual dispatcher verification panel decision workflow
   };
 
   // Run AI Priority Agent for selected issue based on category, severity, and calculated age
@@ -294,6 +272,46 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
     } finally {
       setIsCalculatingPriority(false);
     }
+  };
+
+  const getCitizenAIInsight = () => {
+    if (personalIssues.length === 0) {
+      return "More operational data is required before meaningful insights can be generated.";
+    }
+
+    // Check if user has an issue that is assigned
+    const assignedIssue = personalIssues.find(i => i.status === "Assigned" && i.department);
+    if (assignedIssue) {
+      if (assignedIssue.category.toLowerCase().includes("drain") || assignedIssue.title.toLowerCase().includes("drain")) {
+        return "Your drainage issue has been assigned to the Water Department.";
+      }
+      return `Your reported ${assignedIssue.category.toLowerCase()} ("${assignedIssue.title}") has been assigned to the ${assignedIssue.department} division.`;
+    }
+
+    // Check if user has an issue awaiting verification
+    const awaitingVerIssue = personalIssues.find(i => i.status === "Resolved" && !i.resolutionVerification);
+    if (awaitingVerIssue) {
+      return "Repair work is scheduled after the current verification queue.";
+    }
+
+    // Check if user has a pothole report
+    const potholeIssue = personalIssues.find(i => i.category.toLowerCase().includes("pothole") || i.category.toLowerCase().includes("road"));
+    if (potholeIssue) {
+      return "Road repairs in your area are typically completed within 2–3 days. We are tracking your reported pavement defect.";
+    }
+
+    // Check water leak increase
+    const waterLeaksInLocality = issues.filter(i => 
+      i.category.toLowerCase().includes("water") && 
+      (Date.now() - new Date(i.createdAt).getTime()) < 7 * 24 * 60 * 60 * 1000
+    ).length;
+    if (waterLeaksInLocality > 2) {
+      return `Water leakage reports in your locality have increased this week, with ${waterLeaksInLocality} active cases under review.`;
+    }
+
+    // Default return
+    const newestIssue = personalIssues[0];
+    return `Your reported issue ("${newestIssue.title}") is currently being monitored in the triage queue. Dispatch time is estimated at 24 hours.`;
   };
 
   // Fetch AI-powered insights from the Express API
@@ -518,19 +536,10 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
     const q = query(issuesCollection, orderBy("createdAt", "desc"));
     
     setLoadingIssues(true);
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
       if (querySnapshot.empty) {
-        if (isSeedingRef.current) return;
-        isSeedingRef.current = true;
-        setIsSeeding(true);
-        try {
-          await seedDemoIssuesIfEmpty();
-        } catch (err) {
-          console.error("Auto seeding failed:", err);
-        } finally {
-          setIsSeeding(false);
-          isSeedingRef.current = false;
-        }
+        setIssues([]);
+        setLoadingIssues(false);
         return;
       }
 
@@ -566,9 +575,9 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
       // Compute statistics locally
       const totalCount = list.length;
       const resolvedCount = list.filter((i) => i.status === "Verified & Closed" || i.status === "Closed").length;
-      const openCount = list.filter((i) => i.status !== "Verified & Closed" && i.status !== "Closed").length;
-      const criticalCount = list.filter((i) => i.severity === "Critical").length;
-      const pendingVerificationCount = list.filter((i) => i.status === "Resolved" || i.status === "AI Verification").length;
+      const openCount = list.filter((i) => i.status !== "Verified & Closed" && i.status !== "Closed" && i.status !== "Resolved").length;
+      const criticalCount = list.filter((i) => i.severity === "Critical" && i.status !== "Verified & Closed" && i.status !== "Closed" && i.status !== "Resolved").length;
+      const pendingVerificationCount = list.filter((i) => i.status === "Resolved").length;
 
       const resolvedIssuesList = list.filter((i) => i.status === "Verified & Closed" || i.status === "Closed");
       let totalResolutionTimeMs = 0;
@@ -644,7 +653,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
       setStats({
         totalCount,
         resolvedCount,
-        inProgressCount: list.filter((i) => i.status === "In Progress").length,
+        inProgressCount: list.filter((i) => i.status === "In Progress" || i.status === "Needs Rework" || i.status === "Awaiting Evidence").length,
         pendingCount: list.filter((i) => i.status === "Submitted" || i.status === "Verified" || i.status === "Reported" || i.status === "Under Review" || i.status === "Assigned").length,
         openCount,
         criticalCount,
@@ -667,6 +676,28 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
 
     return () => unsubscribe();
   }, [hasFetchedInsights]);
+
+  // Listen for developer tools custom events
+  useEffect(() => {
+    const handleDevAction = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { type } = customEvent.detail || {};
+      if (type === "refresh-dashboard") {
+        fetchDailyBrief(issues, true);
+        fetchMunicipalInsights(issues);
+        fetchAIInsights(issues);
+      } else if (type === "regenerate-brief") {
+        fetchDailyBrief(issues, true);
+      } else if (type === "recalculate-analytics") {
+        fetchMunicipalInsights(issues);
+      } else if (type === "rebuild-insights") {
+        fetchAIInsights(issues);
+      }
+    };
+
+    window.addEventListener("dev-action", handleDevAction);
+    return () => window.removeEventListener("dev-action", handleDevAction);
+  }, [issues]);
 
   // Handle status updates (City Official action)
   const handleUpdateStatus = async (issueId: string, newStatus: string) => {
@@ -705,15 +736,228 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
     hover: { x: 3 }
   };
 
+  // Render function for weekly activity trend SVG line chart
+  const renderWeeklyTrendChart = () => {
+    if (!stats || !stats.weeklyTrend || stats.weeklyTrend.length === 0) {
+      return <div className="text-xs text-slate-500 font-semibold p-4">Trend calculations pending...</div>;
+    }
+    
+    const trend = stats.weeklyTrend;
+    const maxVal = Math.max(...trend.map(d => Math.max(d.reported, d.resolved)), 4);
+    
+    const width = 500;
+    const height = 200;
+    const padding = 30;
+    
+    const chartWidth = width - padding * 2;
+    const chartHeight = height - padding * 2;
+    
+    const getX = (index: number) => padding + (index * chartWidth) / (trend.length - 1);
+    const getY = (value: number) => padding + chartHeight - (value * chartHeight) / maxVal;
+    
+    let reportedPath = "";
+    let resolvedPath = "";
+    
+    trend.forEach((d, i) => {
+      const x = getX(i);
+      const yRep = getY(d.reported);
+      const yRes = getY(d.resolved);
+      
+      if (i === 0) {
+        reportedPath = `M ${x} ${yRep}`;
+        resolvedPath = `M ${x} ${yRes}`;
+      } else {
+        reportedPath += ` L ${x} ${yRep}`;
+        resolvedPath += ` L ${x} ${yRes}`;
+      }
+    });
+    
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono">Weekly Incident Velocity</h4>
+          <div className="flex items-center space-x-3 text-[10px] font-mono font-bold">
+            <div className="flex items-center space-x-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 block"></span>
+              <span className="text-indigo-400">Reported</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 block"></span>
+              <span className="text-emerald-450">Resolved</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="relative bg-slate-950/50 p-4 rounded-2xl border border-slate-900/60 shadow-inner">
+          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+            {/* Y Axis Grid Lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
+              const val = Math.round(maxVal * p);
+              const y = getY(val);
+              return (
+                <g key={idx} className="opacity-20">
+                  <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#475569" strokeDasharray="3,3" />
+                  <text x={padding - 5} y={y + 3} fill="#94a3b8" fontSize="8" textAnchor="end" className="font-mono">{val}</text>
+                </g>
+              );
+            })}
+            
+            {/* X Axis Labels */}
+            {trend.map((d, i) => {
+              const x = getX(i);
+              return (
+                <text key={i} x={x} y={height - 10} fill="#94a3b8" fontSize="8" textAnchor="middle" className="font-mono opacity-60">
+                  {d.date}
+                </text>
+              );
+            })}
+            
+            {/* Area Fill for reported */}
+            <path d={`${reportedPath} L ${getX(trend.length - 1)} ${getY(0)} L ${getX(0)} ${getY(0)} Z`} fill="url(#reported-grad)" className="opacity-10" />
+            
+            <defs>
+              <linearGradient id="reported-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#6366f1" />
+                <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+
+            {/* Reported Path */}
+            <path d={reportedPath} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            {/* Resolved Path */}
+            <path d={resolvedPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4,4" />
+            
+            {/* Dots on points */}
+            {trend.map((d, i) => {
+              const x = getX(i);
+              const yRep = getY(d.reported);
+              const yRes = getY(d.resolved);
+              return (
+                <g key={i}>
+                  <circle cx={x} cy={yRep} r="3.5" fill="#6366f1" stroke="#0f172a" strokeWidth="1.5" />
+                  <circle cx={x} cy={yRes} r="3.5" fill="#10b981" stroke="#0f172a" strokeWidth="1.5" />
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      </div>
+    );
+  };
+
+  // Render function for category distribution progress bars
+  const renderCategoryChart = () => {
+    if (!stats || !stats.categoryBreakdown || stats.categoryBreakdown.length === 0) {
+      return <div className="text-xs text-slate-500 font-semibold p-4">Category allocation pending...</div>;
+    }
+    const categoriesList = stats.categoryBreakdown;
+    const maxVal = Math.max(...categoriesList.map(c => c.count), 1);
+    
+    return (
+      <div className="space-y-4">
+        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono">Category Allocation</h4>
+        <div className="space-y-4 bg-slate-955/50 p-5 rounded-2xl border border-slate-900/60">
+          {categoriesList.map((c) => {
+            const pct = (c.count / maxVal) * 100;
+            return (
+              <div key={c.category} className="space-y-1.5">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-slate-300">{c.category}</span>
+                  <span className="text-indigo-405 font-mono font-bold">{c.count} {c.count === 1 ? 'case' : 'cases'}</span>
+                </div>
+                <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-850/50">
+                  <motion.div 
+                    className="bg-indigo-500 h-full rounded-full" 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${pct}%` }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // Render function for severity distribution progress lines
+  const renderSeverityChart = () => {
+    if (!stats || !stats.severityBreakdown || stats.severityBreakdown.length === 0) {
+      return <div className="text-xs text-slate-500 font-semibold p-4">Severity breakdown pending...</div>;
+    }
+    const severities = stats.severityBreakdown;
+    const total = stats.totalCount || 1;
+    
+    return (
+      <div className="space-y-4">
+        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono">Severity Proportions</h4>
+        <div className="space-y-4 bg-slate-955/50 p-5 rounded-2xl border border-slate-900/60">
+          {["Critical", "High", "Medium", "Low"].map((sev) => {
+            const found = severities.find(s => s.severity === sev);
+            const count = found ? found.count : 0;
+            const pct = Math.round((count / total) * 100);
+            
+            let barColor = "bg-emerald-500";
+            if (sev === "Critical") {
+              barColor = "bg-rose-500";
+            } else if (sev === "High") {
+              barColor = "bg-orange-500";
+            } else if (sev === "Medium") {
+              barColor = "bg-amber-500";
+            }
+            
+            return (
+              <div key={sev} className="flex items-center justify-between gap-4 text-xs">
+                <div className="w-20 font-bold text-slate-350">{sev}</div>
+                <div className="flex-1 bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-850/50">
+                  <motion.div 
+                    className={`h-full rounded-full ${barColor}`} 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${pct}%` }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                  />
+                </div>
+                <div className="w-16 text-right font-mono font-bold text-slate-400">
+                  {count} ({pct}%)
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const personalIssues = issues.filter(
+    (i) => i.reporterEmail === currentUser?.email
+  );
+
+  const filteredPersonalIssues = personalIssues.filter((i) => {
+    if (personalFilterStatus === "All") {
+      return i.status !== "Verified & Closed" && i.status !== "Closed";
+    }
+    if (personalFilterStatus === "Submitted") {
+      return i.status === "Submitted" || i.status === "Reported";
+    }
+    if (personalFilterStatus === "Verified & Closed") {
+      return i.status === "Verified & Closed" || i.status === "Closed";
+    }
+    return i.status === personalFilterStatus;
+  });
+
   return (
     <div id="dashboard-page" className="min-h-screen bg-slate-955 text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-white pb-12 relative overflow-hidden">
       
+      {/* Smart City Network Animation Background */}
+      <AINetworkBackground />
+
       {/* Visual background glows */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/5 rounded-full blur-[120px] -z-10 pointer-events-none" />
       <div className="absolute bottom-1/4 right-10 w-[500px] h-[500px] bg-purple-600/5 rounded-full blur-[120px] -z-10 pointer-events-none" />
 
       {/* Modern Navigation Header */}
-      <header className="sticky top-0 z-40 bg-slate-950/70 backdrop-blur-xl border-b border-slate-900/85 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+      <header className="sticky top-0 z-40 bg-slate-955/70 backdrop-blur-xl border-b border-slate-900/85 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => onNavigate("landing")}>
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-primary to-brand-secondary flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-indigo-600/35 group-hover:scale-105 transition-all">
@@ -725,6 +969,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
           </div>
 
           <div className="flex items-center space-x-4">
+
             {currentUser ? (
               <div className="flex items-center space-x-3">
                 <div className="text-right hidden sm:block">
@@ -767,7 +1012,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
             <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
             <div>
               <p className="font-extrabold text-white">Local Image Handling Active (Dashboard)</p>
-              <p className="text-slate-400 mt-0.5 leading-relaxed">
+              <p className="text-slate-400 mt-0.5 leading-relaxed font-semibold">
                 Firebase Storage is not configured or unavailable. Resolution proof uploads will be optimized and saved locally using base64.
               </p>
             </div>
@@ -775,865 +1020,421 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
         </div>
       )}
 
-      {/* Main Grid Desk */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 relative z-10">
-        
-        {/* Welcome titles */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
-              Civic Intelligence Command Desk
-            </h1>
-            <p className="text-slate-400 text-xs font-medium">
-              Enterprise-grade municipal tracking grid powered by Gemini Vision & live telemetry synchronization.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            {currentUser?.role === "official" && (
-              <Button
-                id="dash-official-btn"
-                onClick={() => onNavigate("official")}
-                variant="glass"
-                size="sm"
-                className="font-bold rounded-xl"
-                leftIcon={<Building className="w-3.5 h-3.5 text-indigo-400" />}
-              >
-                Official Command
-              </Button>
-            )}
-            <Button
-              onClick={() => {
-                fetchAIInsights(issues);
-                fetchMunicipalInsights(issues);
-              }}
-              variant="secondary"
-              size="sm"
-              className="font-bold rounded-xl border border-slate-850"
-              leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-            >
-              Refresh AI Insights
-            </Button>
-            <Button
-              id="dash-report-btn"
-              onClick={() => onNavigate("report")}
-              variant="primary"
-              size="sm"
-              className="font-bold rounded-xl shadow-lg"
-              leftIcon={<Sparkles className="w-3.5 h-3.5" />}
-            >
-              Report Hazard
-            </Button>
-          </div>
-        </div>
-
-        {/* AI Municipal Daily Brief (Daily Brief at the Top) */}
-        <div id="ai-municipal-daily-brief" className="w-full">
-          {loadingDailyBrief && !dailyBrief ? (
-            <Card variant="glass" glow="indigo" className="p-8">
-              {/* Sleek chat loading skeleton details */}
-              <div className="space-y-4 py-8 max-w-xl mx-auto animate-pulse">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-850"></div>
-                  <div className="h-4 bg-slate-850 rounded w-1/3"></div>
-                </div>
-                <div className="h-3 bg-slate-850 rounded w-full"></div>
-                <div className="h-3 bg-slate-850 rounded w-5/6"></div>
-                <div className="h-3 bg-slate-850 rounded w-4/5"></div>
-              </div>
-            </Card>
-          ) : dailyBrief ? (
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-            >
-              <Card variant="glass" glow="indigo">
-                {/* Daily Brief header */}
-                <div className="border-b border-slate-900 px-6 sm:px-8 py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/20">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-primary to-brand-secondary flex items-center justify-center text-white shadow-lg border border-white/10">
-                      <Brain className="w-5.5 h-5.5 animate-pulse" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-extrabold text-white tracking-tight flex items-center gap-2">
-                        AI Municipal Daily Brief
-                        <span className="flex h-2 w-2 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                      </h2>
-                      <p className="text-slate-400 text-[11px] font-semibold">
-                        Executive operational overview powered by Gemini
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="bg-slate-900 border border-slate-800 px-3.5 py-1.5 rounded-xl flex items-center space-x-2">
-                      <Activity className="w-3.5 h-3.5 text-indigo-400" />
-                      <span className="text-[11px] font-bold text-slate-350 font-mono">Today:</span>
-                      <span className="bg-indigo-950 text-indigo-400 text-[10px] px-2 py-0.5 rounded-md font-extrabold border border-indigo-900/30 font-mono">
-                        {dailyBrief.totalReportsToday} {dailyBrief.totalReportsToday === 1 ? 'Report' : 'Reports'}
-                      </span>
-                    </div>
-
-                    <Button
-                      onClick={() => fetchDailyBrief(issues, true)}
-                      loading={loadingDailyBrief}
-                      variant="outline"
-                      size="sm"
-                      className="px-2.5 py-2.5 h-9"
-                    >
-                      {!loadingDailyBrief && <RefreshCw className="w-3.5 h-3.5" />}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Bento Grid Content */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 sm:p-8">
-                  
-                  {/* Risks & Highest Priority Area */}
-                  <div className="space-y-6">
-                    <Card variant="bordered" className="p-5 space-y-4 bg-slate-900/10 border-slate-900">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-455 flex items-center gap-1.5 font-mono">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          Risk Forecast
-                        </h4>
-                        <Badge variant={getSeverityVariant(dailyBrief.riskForecast.level)}>
-                          {dailyBrief.riskForecast.level} Risk
-                        </Badge>
-                      </div>
-                      <p className="text-slate-305 text-xs leading-relaxed font-medium">
-                        {dailyBrief.riskForecast.description}
-                      </p>
-                      <div className="space-y-1.5">
-                        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 font-mono">Vulnerable Sectors</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {dailyBrief.riskForecast.vulnerableSectors.map((sector, idx) => (
-                            <Badge key={idx}>{sector}</Badge>
-                          ))}
-                        </div>
-                      </div>
-                    </Card>
-
-                    <Card variant="bordered" className="p-5 space-y-3 bg-slate-900/10 border-slate-900">
-                      <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-455 flex items-center gap-1.5 font-mono">
-                        <MapPin className="w-3.5 h-3.5" />
-                        Highest Priority Area
-                      </h4>
-                      <div className="space-y-1">
-                        <p className="text-white text-xs font-bold">{dailyBrief.highestPriorityArea.locationName}</p>
-                        <div className="flex items-center space-x-1.5">
-                          <span className="text-[10px] text-slate-400">Active reports count:</span>
-                          <Badge variant="critical">{dailyBrief.highestPriorityArea.activeIssuesCount} cases</Badge>
-                        </div>
-                      </div>
-                      <p className="text-slate-305 text-xs leading-relaxed font-medium">
-                        {dailyBrief.highestPriorityArea.primaryRisk}
-                      </p>
-                    </Card>
-                  </div>
-
-                  {/* Emerging Trends & Departments */}
-                  <div className="space-y-6">
-                    <Card variant="bordered" className="p-5 space-y-4 bg-slate-900/10 border-slate-900">
-                      <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-455 flex items-center gap-1.5 font-mono">
-                        <TrendingUp className="w-3.5 h-3.5" />
-                        Emerging Trends
-                      </h4>
-                      <div className="space-y-4">
-                        {dailyBrief.emergingTrends.map((trendItem, idx) => (
-                          <div key={idx} className="border-l border-indigo-500/50 pl-3 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <p className="text-white text-xs font-bold leading-tight">{trendItem.trend}</p>
-                              <Badge variant={getSeverityVariant(trendItem.impactLevel)}>
-                                {trendItem.impactLevel}
-                              </Badge>
-                            </div>
-                            <p className="text-slate-405 text-[10px] leading-relaxed font-medium">
-                              {trendItem.description}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-
-                    <Card variant="bordered" className="p-5 space-y-3.5 bg-slate-900/10 border-slate-900">
-                      <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-455 flex items-center gap-1.5 font-mono">
-                        <Building className="w-3.5 h-3.5" />
-                        Attention Required
-                      </h4>
-                      <div className="space-y-3">
-                        {dailyBrief.urgentDepartments.map((dept, idx) => (
-                          <div key={idx} className="bg-slate-950/40 rounded-xl p-3 border border-slate-900 flex flex-col gap-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-white text-xs font-bold">{dept.department}</span>
-                              <Badge variant={getSeverityVariant(dept.urgency)}>
-                                {dept.urgency}
-                              </Badge>
-                            </div>
-                            <p className="text-slate-405 text-[10px] leading-relaxed font-medium">
-                              {dept.reason}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-                  </div>
-
-                  {/* Actions & Predictive Load */}
-                  <div className="space-y-6">
-                    <Card variant="bordered" className="p-5 space-y-4 bg-slate-900/10 border-slate-900">
-                      <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-455 flex items-center gap-1.5 font-mono">
-                        <ClipboardCheck className="w-3.5 h-3.5" />
-                        AI Recommendations
-                      </h4>
-                      <div className="space-y-3">
-                        {dailyBrief.recommendedActions.map((rec, idx) => (
-                          <div key={idx} className="bg-slate-950/40 border border-slate-900 rounded-xl p-3 space-y-1.5">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wide font-mono">{rec.timeline}</span>
-                            </div>
-                            <p className="text-white text-xs font-bold leading-tight">{rec.action}</p>
-                            <p className="text-slate-405 text-[10px] leading-relaxed font-medium">
-                              <strong className="text-slate-350">Rationale:</strong> {rec.rationale}
-                            </p>
-                            <p className="text-[9px] text-emerald-450 font-semibold bg-emerald-950/10 border border-emerald-900/20 p-2 rounded-xl">
-                              Impact: {rec.impact}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-
-                    <Card variant="bordered" className="p-5 space-y-3.5 bg-slate-900/10 border-slate-900">
-                      <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-455 flex items-center gap-1.5 font-mono">
-                        <Calendar className="w-3.5 h-3.5" />
-                        7-Day Predictive Load
-                      </h4>
-                      <div className="space-y-2.5">
-                        {dailyBrief.predictedIssues7Days.map((pred, idx) => (
-                          <div key={idx} className="flex flex-col gap-1 bg-slate-950/40 p-2.5 rounded-xl border border-slate-900">
-                            <div className="flex items-center justify-between">
-                              <span className="text-white text-xs font-bold">{pred.category}</span>
-                              <div className="flex items-center space-x-2">
-                                <Badge variant={pred.probability >= 80 ? "critical" : "high"}>
-                                  ~{pred.expectedCount} est ({pred.probability}%)
-                                </Badge>
-                              </div>
-                            </div>
-                            <p className="text-slate-405 text-[9.5px] leading-relaxed font-semibold">
-                              {pred.factors}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-                  </div>
-
-                </div>
-              </Card>
-            </motion.div>
-          ) : null}
-        </div>
-
-        {/* Enhanced KPI Cards */}
-        {!stats || loadingIssues || isSeeding ? (
-          <SkeletonStats />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Sticky Tab Navigation */}
+      <div className="sticky top-16 z-30 bg-slate-955/80 backdrop-blur-md border-b border-slate-900/80 py-3.5 shadow-md shadow-slate-950/15">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <nav className="flex space-x-1 sm:space-x-2 bg-slate-900/60 p-1 rounded-xl border border-slate-850/50">
+              {[
+                { id: "overview", label: "Overview", icon: <Activity className="w-3.5 h-3.5" /> },
+                { id: "reports", label: "My Reports", icon: <FileText className="w-3.5 h-3.5" /> },
+                { id: "nearby", label: "Nearby Map", icon: <MapPin className="w-3.5 h-3.5" /> }
+              ].map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`flex items-center space-x-1.5 px-3 py-2 text-xs font-bold rounded-lg transition-all duration-200 cursor-pointer ${
+                      isActive
+                        ? "bg-indigo-650 text-white shadow-md shadow-indigo-600/20 animate-fade-in"
+                        : "text-slate-400 hover:text-slate-250 hover:bg-slate-800/40"
+                    }`}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
             
-            <motion.div whileHover={{ y: -5 }}>
-              <Card variant="interactive" className="p-6 h-full relative group overflow-hidden bg-gradient-to-br from-indigo-950/40 to-slate-900/20 border-indigo-900/40 shadow-lg shadow-indigo-950/5">
-                <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-110 transition-transform duration-300">
-                  <FileText className="w-24 h-24 text-indigo-400" />
-                </div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest font-mono">Total Issues</span>
-                  <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                    <FileText className="w-4 h-4" />
-                  </span>
-                </div>
-                <div className="flex items-baseline space-x-1.5">
-                  <span className="text-3xl font-black text-white tracking-tight">
-                    <AnimatedNumber value={stats.totalCount} />
-                  </span>
-                  <span className="text-[10px] font-extrabold text-indigo-405 font-mono tracking-wider uppercase bg-indigo-955/35 px-1.5 py-0.5 rounded border border-indigo-900/25">
-                    +12% Last Wk
-                  </span>
-                </div>
-              </Card>
-            </motion.div>
-
-            <motion.div whileHover={{ y: -5 }}>
-              <Card variant="interactive" className="p-6 h-full relative group overflow-hidden bg-gradient-to-br from-red-950/40 to-slate-900/20 border-red-900/30 shadow-lg shadow-red-955/5" glow={stats.criticalCount && stats.criticalCount > 0 ? "indigo" : "none"}>
-                <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-110 transition-transform duration-300">
-                  <ShieldAlert className="w-24 h-24 text-red-400" />
-                </div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-bold text-red-300 uppercase tracking-widest font-mono">Critical Backlog</span>
-                  <span className="p-2 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20">
-                    <ShieldAlert className="w-4 h-4 animate-pulse" />
-                  </span>
-                </div>
-                <div className="flex items-baseline space-x-1.5">
-                  <span className="text-3xl font-black text-white tracking-tight">
-                    <AnimatedNumber value={stats.criticalCount ?? 0} />
-                  </span>
-                  <span className="text-[10px] font-extrabold text-red-405 font-mono tracking-wider uppercase bg-red-955/35 px-1.5 py-0.5 rounded border border-red-900/25">
-                    Emergency Priority
-                  </span>
-                </div>
-              </Card>
-            </motion.div>
-
-            <motion.div whileHover={{ y: -5 }}>
-              <Card variant="interactive" className="p-6 h-full relative group overflow-hidden bg-gradient-to-br from-orange-950/40 to-slate-900/20 border-orange-900/30 shadow-lg shadow-orange-955/5">
-                <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-110 transition-transform duration-300">
-                  <Clock className="w-24 h-24 text-orange-400" />
-                </div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-bold text-orange-300 uppercase tracking-widest font-mono">Open Pipeline</span>
-                  <span className="p-2 rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20">
-                    <Clock className="w-4 h-4" />
-                  </span>
-                </div>
-                <div className="flex items-baseline space-x-1.5">
-                  <span className="text-3xl font-black text-white tracking-tight">
-                    <AnimatedNumber value={stats.openCount ?? (stats.totalCount - stats.resolvedCount)} />
-                  </span>
-                  <span className="text-[10px] font-extrabold text-orange-405 font-mono tracking-wider uppercase bg-orange-955/35 px-1.5 py-0.5 rounded border border-orange-900/25">
-                    Triage Dispatch
-                  </span>
-                </div>
-              </Card>
-            </motion.div>
-
-            <motion.div whileHover={{ y: -5 }}>
-              <Card variant="interactive" className="p-6 h-full relative group overflow-hidden bg-gradient-to-br from-emerald-950/40 to-slate-900/20 border-emerald-900/30 shadow-lg shadow-emerald-950/5">
-                <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-[0.03] group-hover:scale-110 transition-transform duration-300">
-                  <CheckCircle2 className="w-24 h-24 text-emerald-400" />
-                </div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-widest font-mono">Resolved Claims</span>
-                  <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </span>
-                </div>
-                <div className="flex items-baseline space-x-1.5">
-                  <span className="text-3xl font-black text-white tracking-tight">
-                    <AnimatedNumber value={stats.resolvedCount} />
-                  </span>
-                  <span className="text-[10px] font-extrabold text-emerald-405 font-mono tracking-wider uppercase bg-emerald-955/35 px-1.5 py-0.5 rounded border border-emerald-900/25">
-                    {stats.totalCount > 0 ? Math.round((stats.resolvedCount / stats.totalCount) * 100) : 0}% Close Rate
-                  </span>
-                </div>
-              </Card>
-            </motion.div>
-
-          </div>
-        )}
-
-        {/* Executive Analytics Indicators Panel */}
-        <Card variant="glass" className="p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="space-y-1">
-              <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
-                <Brain className="w-5 h-5 text-indigo-400 animate-pulse" />
-                <span>Municipal Insights Dashboard</span>
-              </h2>
-              <p className="text-xs text-slate-400 font-medium">
-                Comprehensive 5-dimension analytics synthesized in real-time using Gemini Vision & Reasoning.
-              </p>
-            </div>
-            
-            {loadingMunicipalInsights && (
-              <div className="flex items-center gap-2 text-xs font-bold text-indigo-455 bg-indigo-950/40 border border-indigo-900/30 px-3 py-1.5 rounded-xl animate-pulse font-mono">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                <span>Generating insights...</span>
-              </div>
-            )}
-          </div>
-
-          {loadingMunicipalInsights ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="bg-slate-900/20 p-5 rounded-2xl border border-slate-900 shadow-sm animate-pulse space-y-3">
-                  <div className="w-8 h-8 bg-slate-800 rounded-lg"></div>
-                  <div className="h-4 bg-slate-800 rounded w-2/3"></div>
-                  <div className="h-8 bg-slate-800 rounded w-1/2"></div>
-                  <div className="h-12 bg-slate-800 rounded"></div>
-                </div>
-              ))}
-            </div>
-          ) : !municipalInsights ? (
-            <div className="rounded-2xl border border-slate-900 p-8 text-center space-y-3 bg-slate-900/10">
-              <p className="text-xs text-slate-400">No municipal analytics generated yet. Click to analyze all issue databases.</p>
+            <div className="flex items-center gap-3">
+              {currentUser?.role === "official" && (
+                <Button
+                  id="dash-official-btn"
+                  onClick={() => onNavigate("official")}
+                  variant="glass"
+                  size="sm"
+                  className="font-bold rounded-xl text-xs py-1.5 px-3"
+                  leftIcon={<Building className="w-3.5 h-3.5 text-indigo-400" />}
+                >
+                  Official Command
+                </Button>
+              )}
               <Button
-                onClick={() => fetchMunicipalInsights(issues)}
+                id="dash-report-btn"
+                onClick={() => onNavigate("report")}
                 variant="primary"
                 size="sm"
-                leftIcon={<Sparkles className="w-3.5 h-3.5" />}
-                className="mx-auto"
+                className="font-bold rounded-xl text-xs py-1.5 px-3 shadow-md shadow-indigo-600/10"
+                leftIcon={<Sparkles className="w-3 h-3" />}
               >
-                Generate Municipal Analytics
+                Report Issue
               </Button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              
-              {/* 1. Most Common Category */}
-              <Card variant="interactive" className="p-5 bg-slate-900/10 border-slate-900 flex flex-col justify-between h-full">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center text-indigo-400 border border-indigo-500/20">
-                      <TrendingUp className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider font-mono">Common Category</span>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-extrabold text-white leading-tight">
-                      {municipalInsights.mostCommonCategory.category}
-                    </h3>
-                    <div className="flex items-baseline gap-1.5 mt-1">
-                      <span className="text-2xl font-black text-white">
-                        {municipalInsights.mostCommonCategory.percentage}%
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-505 font-mono">
-                        ({municipalInsights.mostCommonCategory.count} cases)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed font-medium pt-3 mt-3 border-t border-slate-900">
-                  {municipalInsights.mostCommonCategory.description}
-                </p>
-              </Card>
-
-              {/* 2. Highest Risk Zones */}
-              <Card variant="interactive" className="p-5 bg-slate-900/10 border-slate-900 flex flex-col justify-between h-full">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="w-8 h-8 bg-rose-500/10 rounded-lg flex items-center justify-center text-rose-400 border border-rose-500/20">
-                      <MapPin className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider font-mono">Risk Zones</span>
-                  </div>
-                  <div className="space-y-2 min-h-[48px]">
-                    {municipalInsights.highestRiskZones.slice(0, 1).map((z, idx) => (
-                      <div key={idx} className="space-y-0.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-extrabold text-white truncate max-w-[110px]">{z.zone}</span>
-                          <Badge variant={getSeverityVariant(z.riskLevel)}>{z.riskLevel}</Badge>
-                        </div>
-                        <p className="text-[10px] font-bold text-slate-500 font-mono">{z.activeIssuesCount} active hazards</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed font-medium pt-3 mt-3 border-t border-slate-900">
-                  {municipalInsights.highestRiskZones[0]?.description}
-                </p>
-              </Card>
-
-              {/* 3. Resolution Trends */}
-              <Card variant="interactive" className="p-5 bg-slate-900/10 border-slate-900 flex flex-col justify-between h-full">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center text-emerald-400 border border-emerald-500/20">
-                      <CheckCircle2 className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider font-mono">Resolution Trends</span>
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-extrabold text-white leading-tight">
-                      {municipalInsights.resolutionTrends.trend}
-                    </h3>
-                    <div className="inline-block mt-1 bg-emerald-950/20 text-emerald-400 border border-emerald-900/30 rounded-lg px-2 py-0.5 text-xs font-bold font-mono">
-                      {municipalInsights.resolutionTrends.percentageChange}
-                    </div>
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed font-medium pt-3 mt-3 border-t border-slate-900">
-                  {municipalInsights.resolutionTrends.details}
-                </p>
-              </Card>
-
-              {/* 4. Emerging Infrastructure Issues */}
-              <Card variant="interactive" className="p-5 bg-slate-900/10 border-slate-900 flex flex-col justify-between h-full">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center text-amber-400 border border-amber-500/20">
-                      <Clock className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider font-mono">Emerging Hazards</span>
-                  </div>
-                  <div className="min-h-[48px]">
-                    <h3 className="text-xs font-extrabold text-white leading-tight">
-                      {municipalInsights.emergingIssues[0]?.title}
-                    </h3>
-                    <Badge variant={getSeverityVariant(municipalInsights.emergingIssues[0]?.severity)} className="mt-1">
-                      {municipalInsights.emergingIssues[0]?.severity} Severity
-                    </Badge>
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed font-medium pt-3 mt-3 border-t border-slate-900">
-                  {municipalInsights.emergingIssues[0]?.description}
-                </p>
-              </Card>
-
-              {/* 5. Recommended Actions */}
-              <Card variant="interactive" className="p-5 bg-indigo-950/20 border-indigo-900/40 text-white flex flex-col justify-between h-full">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="w-8 h-8 bg-indigo-500/25 rounded-lg flex items-center justify-center text-indigo-300 border border-indigo-500/20">
-                      <Sparkles className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider font-mono">Recommended Action</span>
-                  </div>
-                  <div className="min-h-[48px]">
-                    <h3 className="text-[11px] font-bold text-slate-200 leading-normal line-clamp-2">
-                      {municipalInsights.recommendedActions[0]?.action}
-                    </h3>
-                    <div className="flex gap-1.5 mt-1.5">
-                      <Badge variant={getSeverityVariant(municipalInsights.recommendedActions[0]?.priority)}>
-                        {municipalInsights.recommendedActions[0]?.priority}
-                      </Badge>
-                      <span className="px-1.5 py-0.5 bg-slate-900 text-slate-400 rounded text-[8px] font-bold border border-slate-800">
-                        {municipalInsights.recommendedActions[0]?.timeframe}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-[11px] text-indigo-200/90 leading-relaxed font-medium pt-3 mt-3 border-t border-indigo-800/30">
-                  <span className="font-bold text-white">Impact:</span> {municipalInsights.recommendedActions[0]?.impact}
-                </p>
-              </Card>
-
-            </div>
-          )}
-        </Card>
-
-        {/* Dashboard split Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* LEFT: Map overlay and Reported incidents list */}
-          <div className="lg:col-span-8 space-y-6">
-            
-            <Card variant="default" className="p-6 space-y-4">
-              <div className="flex items-center space-x-2">
-                <MapPin className="w-4.5 h-4.5 text-indigo-400 animate-pulse" />
-                <h3 className="text-sm font-extrabold text-white">Infrastructure Map Overlay</h3>
-              </div>
-
-              <div className="h-96 w-full rounded-2xl overflow-hidden border border-slate-900 shadow-sm" style={{ minHeight: "380px" }}>
-                <IssueMap
-                  issues={issues}
-                  onSelectIssue={(iss) => setSelectedIssue(iss)}
-                  selectedIssueId={selectedIssue?.id}
-                />
-              </div>
-
-              <p className="text-[10px] text-slate-500 leading-relaxed text-center font-medium font-mono">
-                Real-time active maps sync geocoded telemetry points straight from citizens to dispatcher queues.
-              </p>
-            </Card>
-
-            <Card variant="default">
-              
-              <div className="p-6 border-b border-slate-900 space-y-4 bg-slate-900/10">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-brand-primary" />
-                    <span>Reported Incident Logs</span>
-                  </h2>
-
-                  <div className="flex flex-wrap items-center gap-1 bg-slate-950 p-1 rounded-2xl border border-slate-900">
-                    {statuses.map(st => (
-                      <button
-                        key={st}
-                        onClick={() => setFilterStatus(st)}
-                        className={`px-3 py-1.5 text-[10px] font-bold rounded-xl transition-all cursor-pointer font-mono ${
-                          filterStatus === st 
-                            ? "bg-slate-800 text-white shadow-sm"
-                            : "text-slate-500 hover:text-slate-350"
-                        }`}
-                      >
-                        {st}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-slate-900">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mr-2 font-mono">Category:</span>
-                  {categories.map(cat => (
-                    <button
-                      key={cat}
-                      onClick={() => setFilterCategory(cat)}
-                      className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all border cursor-pointer ${
-                        filterCategory === cat 
-                          ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-400" 
-                          : "bg-slate-900 border-slate-855 text-slate-450 hover:border-slate-800 hover:text-slate-200"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="divide-y divide-slate-900">
-                {isSeeding ? (
-                  <div className="p-12 text-center space-y-4">
-                    <LoadingSpinner className="mx-auto" size="lg" />
-                    <p className="text-sm font-bold text-brand-primary animate-pulse">Syncing Municipal Databases...</p>
-                  </div>
-                ) : loadingIssues ? (
-                  <div className="p-12">
-                    <SkeletonList count={3} />
-                  </div>
-                ) : filteredIssues.length === 0 ? (
-                  <div className="p-12">
-                    <EmptyState
-                      title="All Clean & Verified!"
-                      description="There are no active municipal hazards or issues matching your selected filters."
-                      onReset={() => {
-                        setFilterStatus("All");
-                        setFilterCategory("All");
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <motion.div
-                    initial="hidden"
-                    animate="visible"
-                    variants={listContainerVariants}
-                    className="divide-y divide-slate-900"
-                  >
-                    {filteredIssues.map((iss) => {
-                      const isSelected = selectedIssue?.id === iss.id;
-                      const cityLabel = getCityLabel(iss.location);
-                      return (
-                        <motion.div
-                          key={iss.id}
-                          id={`issue-${iss.id}`}
-                          variants={listItemVariants}
-                          whileHover={shouldReduceMotion ? {} : "hover"}
-                          onClick={() => setSelectedIssue(iss)}
-                          className={`p-6 flex items-start space-x-4 cursor-pointer transition-all border-l-4 ${
-                            isSelected 
-                              ? "bg-indigo-950/20 border-l-brand-primary animate-pulse" 
-                              : "hover:bg-slate-900/30 border-l-transparent bg-slate-900/10"
-                          }`}
-                        >
-                          <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-855 flex items-center justify-center shrink-0">
-                            {getCategoryIcon(iss.category)}
-                          </div>
-
-                          <div className="space-y-1.5 min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant={getSeverityVariant(iss.severity)}>
-                                {iss.severity}
-                              </Badge>
-                              <Badge variant={getStatusVariant(iss.status)}>
-                                {iss.status}
-                              </Badge>
-                              {iss.priorityScore !== undefined && (
-                                <Badge variant="brand">
-                                  <Sparkles className="w-2.5 h-2.5 shrink-0 text-brand-primary animate-pulse" />
-                                  P{iss.priorityScore}
-                                </Badge>
-                              )}
-                              <span className="text-[10px] font-bold text-sky-400 bg-sky-950/20 border border-sky-900/30 px-1.5 py-0.5 rounded font-mono">
-                                📍 {cityLabel}
-                              </span>
-                            </div>
-
-                            <h3 className="font-extrabold text-white tracking-tight truncate text-sm">
-                              {iss.title}
-                            </h3>
-
-                            <p className="text-xs text-slate-400 line-clamp-1">
-                              {iss.description}
-                            </p>
-
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-slate-500 pt-1 font-mono">
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-3.5 h-3.5 text-indigo-405" />
-                                <span className="truncate max-w-[150px] sm:max-w-[250px]">{iss.location}</span>
-                              </span>
-                              <span>•</span>
-                              <span>{new Date(iss.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                          </div>
-
-                          <ChevronRight className="w-5 h-5 text-slate-655 self-center shrink-0 transition-transform group-hover:translate-x-0.5" />
-                        </motion.div>
-                      );
-                    })}
-                  </motion.div>
-                )}
-              </div>
-            </Card>
-
-          </div>
-
-          {/* RIGHT: Resolution Progress, AI Civic Insights cards, and Activity */}
-          <div className="lg:col-span-4 space-y-6">
-            
-            <Card variant="glass" glow="emerald" className="p-6 space-y-5">
-              <div className="flex items-center space-x-2">
-                <Timer className="w-4.5 h-4.5 text-emerald-450" />
-                <h3 className="text-sm font-extrabold text-white">Resolution Progress</h3>
-              </div>
-
-              {stats ? (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-xs text-slate-400 font-bold uppercase tracking-wider font-mono">Task Completion</span>
-                    <span className="text-2xl font-black text-emerald-400 font-mono">
-                      {stats.totalCount > 0 ? Math.round((stats.resolvedCount / stats.totalCount) * 100) : 0}%
-                    </span>
-                  </div>
-
-                  <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-900">
-                    <div 
-                      className="bg-emerald-500 h-full rounded-full transition-all duration-1000"
-                      style={{ width: `${stats.totalCount > 0 ? (stats.resolvedCount / stats.totalCount) * 100 : 0}%` }}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 text-xs pt-1">
-                    <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block font-mono">Resolved Claims</span>
-                      <span className="text-sm font-extrabold text-white mt-1 block font-mono">{stats.resolvedCount}</span>
-                    </div>
-                    <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-900">
-                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block font-mono">Active Pipeline</span>
-                      <span className="text-sm font-extrabold text-white mt-1 block font-mono">{stats.openCount}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 font-medium">Progress telemetry calculating...</p>
-              )}
-            </Card>
-
-            {/* AI Civic Insights Overhauled as ChatGPT-style Assistant Response Card */}
-            <Card variant="glass" glow="purple" className="p-6 space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 border border-indigo-500/20">
-                    <Brain className="w-4.5 h-4.5" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-extrabold tracking-tight text-white">AI Civic Insights</h2>
-                    <p className="text-[10px] text-indigo-300 font-bold tracking-wider uppercase font-mono">Assistant Advisory</p>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={() => fetchAIInsights()}
-                  loading={loadingInsights}
-                  variant="outline"
-                  size="sm"
-                  className="px-2.5 py-2.5 h-8 w-8"
-                >
-                  {!loadingInsights && <RefreshCw className="w-3.5 h-3.5" />}
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {/* Modern loading skeletons for insights loading state */}
-                {loadingInsights ? (
-                  <SkeletonInsights />
-                ) : insights.length === 0 ? (
-                  <p className="text-xs text-indigo-300 text-center py-4">No structural insights available.</p>
-                ) : (
-                  insights.slice(0, 2).map((ins) => {
-                    const confidence = ins.confidenceScore || 92;
-                    return (
-                      <div 
-                        key={ins.id}
-                        className="bg-slate-950/70 border border-indigo-500/15 rounded-2xl p-4.5 space-y-4 shadow-xl hover:border-indigo-500/30 transition-all text-xs"
-                      >
-                        {/* ChatGPT message avatar and confidence details line */}
-                        <div className="flex items-center justify-between border-b border-slate-900/80 pb-3">
-                          <div className="flex items-center space-x-2.5">
-                            <div className="w-6 h-6 rounded bg-gradient-to-tr from-brand-primary to-indigo-500 flex items-center justify-center text-white shrink-0 shadow">
-                              <Sparkles className="w-3.5 h-3.5" />
-                            </div>
-                            <span className="text-[10.5px] font-extrabold text-slate-100 tracking-tight">{ins.title}</span>
-                          </div>
-                          
-                          <Badge variant="brand" className="text-[8.5px] font-bold font-mono">
-                            Accuracy: {confidence}%
-                          </Badge>
-                        </div>
-
-                        {/* Summary description block */}
-                        <div className="space-y-1 leading-relaxed text-slate-300 font-semibold font-sans">
-                          <p>{ins.summary}</p>
-                        </div>
-
-                        {/* Action parameters block */}
-                        <div className="bg-indigo-950/20 border border-indigo-900/30 rounded-xl p-3 space-y-2">
-                          <span className="text-[9px] font-extrabold uppercase tracking-wider text-indigo-300 block font-mono">Recommended Action</span>
-                          <p className="text-slate-200 leading-normal font-bold">
-                            {ins.suggestedAction}
-                          </p>
-                        </div>
-
-                        {/* Timestamp line */}
-                        <div className="flex justify-between items-center text-[9px] text-slate-550 border-t border-slate-900/80 pt-2.5 font-mono">
-                          <span>Sector: {ins.affectedCategory}</span>
-                          <span>Triage: {new Date(ins.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </Card>
-
-            <Card variant="glass" className="p-6 space-y-5">
-              <div className="flex items-center space-x-2">
-                <Activity className="w-4.5 h-4.5 text-indigo-400" />
-                <h3 className="text-sm font-extrabold text-white">Recent Activity</h3>
-              </div>
-
-              <div className="space-y-3.5">
-                {issues.slice(0, 4).map((issue) => {
-                  const city = getCityLabel(issue.location);
-                  return (
-                    <div 
-                      key={issue.id} 
-                      onClick={() => setSelectedIssue(issue)}
-                      className="flex items-start space-x-3 p-2.5 rounded-xl bg-slate-900/10 hover:bg-slate-900/30 border border-slate-900/80 hover:border-slate-800 transition-colors cursor-pointer"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-850 flex items-center justify-center shrink-0">
-                        {getCategoryIcon(issue.category)}
-                      </div>
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <p className="text-xs font-bold text-white truncate">{issue.title}</p>
-                        <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono">
-                          <span>📍 {city}</span>
-                          <span>{new Date(issue.createdAt).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-
           </div>
         </div>
-      </main>
+      </div>
 
+      {/* Main Content Container */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+        <AnimatePresence mode="wait">
+          
+          {/* TAB 1: OVERVIEW */}
+          {activeTab === "overview" && (
+            <motion.div
+              key="overview"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6"
+            >
+              {/* Welcome Section */}
+              <div className="bg-slate-955 border border-slate-900 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden bg-gradient-to-r from-slate-950 to-slate-900/40">
+                <div className="absolute top-0 right-0 translate-x-12 -translate-y-12 w-64 h-64 bg-indigo-650/5 rounded-full blur-[80px] pointer-events-none" />
+                <div className="space-y-2 flex-1 text-center md:text-left">
+                  <h1 className="text-2xl font-black text-white tracking-tight flex items-center justify-center md:justify-start gap-2">
+                    Welcome back, <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">{currentUser?.name || "Citizen"}</span>!
+                  </h1>
+                  <p className="text-slate-405 text-xs font-semibold leading-relaxed max-w-xl">
+                    Review your reported issues, audit live geocoded safety grids, and let Gemini Vision catalog community defects instantly.
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <Button
+                    id="citizen-overview-report-btn"
+                    onClick={() => onNavigate("report")}
+                    variant="primary"
+                    size="md"
+                    className="font-bold rounded-2xl text-xs py-3 px-6 shadow-lg shadow-indigo-600/15"
+                    leftIcon={<Sparkles className="w-4.5 h-4.5" />}
+                  >
+                    Report a New Issue
+                  </Button>
+                </div>
+              </div>
+
+              {/* Personal Statistics */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "My Reported Issues", value: personalIssues.length, icon: <FileText className="w-4 h-4" />, color: "text-indigo-405", bg: "from-indigo-955/40" },
+                  { label: "Resolved by City", value: personalIssues.filter(i => i.status === "Verified & Closed" || i.status === "Closed" || i.status === "Resolved").length, icon: <CheckCircle2 className="w-4 h-4" />, color: "text-emerald-450", bg: "from-emerald-950/40" },
+                  { label: "Active Repairs", value: personalIssues.filter(i => i.status === "In Progress" || i.status === "Assigned" || i.status === "Under Review").length, icon: <Clock className="w-4 h-4" />, color: "text-amber-405", bg: "from-amber-955/40" },
+                  { label: "Critical Incidents", value: personalIssues.filter(i => i.severity === "Critical").length, icon: <AlertTriangle className="w-4 h-4" />, color: "text-rose-455", bg: "from-red-955/40" }
+                ].map((item, idx) => (
+                  <Card key={idx} variant="bordered" className={`p-4 bg-gradient-to-br ${item.bg} to-slate-900/15 border-slate-900/80`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest font-mono">{item.label}</span>
+                      <span className={`p-1.5 rounded-lg bg-slate-900 ${item.color} border border-slate-850/50`}>
+                        {item.icon}
+                      </span>
+                    </div>
+                    <span className="text-2xl font-black text-white tracking-tight">
+                      <AnimatedNumber value={item.value} />
+                    </span>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Split Content */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* My Active Reports (Left, 7 columns) */}
+                <div className="lg:col-span-7 space-y-4">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">My Active Reports</h3>
+                  {personalIssues.filter(i => i.status !== "Verified & Closed" && i.status !== "Closed" && i.status !== "Resolved").length === 0 ? (
+                    <Card variant="glass" className="p-8 text-center space-y-4">
+                      <p className="text-xs text-slate-455 font-semibold leading-relaxed">
+                        No active reported issues. If you notice structural or safety defects in the city, report them to alert city officials.
+                      </p>
+                      <Button
+                        onClick={() => onNavigate("report")}
+                        variant="secondary"
+                        size="sm"
+                        className="mx-auto"
+                      >
+                        File a Report
+                      </Button>
+                    </Card>
+                  ) : (
+                    <div className="space-y-4">
+                      {personalIssues
+                        .filter(i => i.status !== "Verified & Closed" && i.status !== "Closed" && i.status !== "Resolved")
+                        .slice(0, 3)
+                        .map((issue) => (
+                          <Card
+                            key={issue.id}
+                            variant="interactive"
+                            onClick={() => setSelectedIssue(issue)}
+                            className="p-5 hover:translate-y-[-2px] transition-all hover:border-indigo-500/20 shadow-sm"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex items-start space-x-3.5">
+                                <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-850 flex items-center justify-center text-indigo-400 shrink-0">
+                                  {getCategoryIcon(issue.category)}
+                                </div>
+                                <div>
+                                  <h3 className="font-extrabold text-sm text-white tracking-tight leading-tight">
+                                    {issue.title}
+                                  </h3>
+                                  <div className="flex items-center space-x-2 mt-1.5 flex-wrap gap-y-1">
+                                    <Badge>{issue.category}</Badge>
+                                    <Badge variant={getSeverityVariant(issue.severity)}>
+                                      {issue.severity}
+                                    </Badge>
+                                    <span className="text-[10px] text-slate-505 font-mono">
+                                      Filed: {new Date(issue.createdAt).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <Badge variant={getStatusVariant(issue.status)}>
+                                {issue.status}
+                              </Badge>
+                            </div>
+
+                            {/* Timeline display */}
+                            <div className="pt-2.5 mt-2.5 border-t border-slate-900/60 space-y-1.5">
+                              <div className="flex items-center justify-between text-[8px] text-slate-500 font-mono uppercase tracking-wider">
+                                <span>Timeline Progress</span>
+                                <span className="text-indigo-400 font-bold">{issue.status}</span>
+                              </div>
+                              <div className="relative w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                                <div 
+                                  className="absolute top-0 bottom-0 left-0 bg-indigo-500 rounded-full transition-all duration-300"
+                                  style={{ width: `${((getStatusStep(issue.status) + 1) / 7) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Side Column (Right, 5 columns) */}
+                <div className="lg:col-span-5 space-y-6">
+                  {/* Personal AI Analysis card */}
+                  <Card variant="ai" className="p-6 space-y-4 shadow-xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 translate-x-4 -translate-y-4 opacity-5 pointer-events-none">
+                      <Brain className="w-20 h-20 text-indigo-400" />
+                    </div>
+                    <div className="flex items-center space-x-2 pb-1 border-b border-slate-900/85">
+                      <Brain className="w-4.5 h-4.5 text-indigo-455" />
+                      <span className="text-xs font-bold text-white uppercase tracking-widest font-mono">Personal AI Insights</span>
+                    </div>
+                    <p className="text-xs text-slate-200 leading-relaxed font-semibold">
+                      {getCitizenAIInsight()}
+                    </p>
+                    <div className="bg-indigo-955/20 border border-indigo-900/30 p-3 rounded-2xl text-[10px] text-indigo-305 font-mono flex items-center space-x-2">
+                      <Sparkles className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+                      <span>Support existing nearby reports to amplify community impact!</span>
+                    </div>
+                  </Card>
+
+                  {/* Recent activity list */}
+                  <Card variant="glass" className="p-6 space-y-4 shadow-xl">
+                    <div className="flex items-center space-x-2 pb-1 border-b border-slate-900/85">
+                      <Activity className="w-4.5 h-4.5 text-indigo-405" />
+                      <span className="text-xs font-bold text-white uppercase tracking-widest font-mono">Recent telemetry Activity</span>
+                    </div>
+                    <div className="space-y-3">
+                      {issues.filter(i => i.status !== "Verified & Closed" && i.status !== "Closed" && i.status !== "Resolved").slice(0, 3).map((issue) => {
+                        const city = getCityLabel(issue.location);
+                        return (
+                          <div 
+                            key={issue.id} 
+                            onClick={() => setSelectedIssue(issue)}
+                            className="flex items-start space-x-3 p-2.5 rounded-xl bg-slate-905/30 hover:bg-slate-900 border border-slate-900/80 hover:border-slate-850 transition-colors cursor-pointer"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-slate-955 border border-slate-850 flex items-center justify-center shrink-0">
+                              {getCategoryIcon(issue.category)}
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                              <p className="text-xs font-bold text-white truncate">{issue.title}</p>
+                              <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono">
+                                <span>📍 {city}</span>
+                                <span>{new Date(issue.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* TAB 2: MY REPORTS */}
+          {activeTab === "reports" && (
+            <motion.div
+              key="reports"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6"
+            >
+              <div className="space-y-1">
+                <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                  My Filed Incident Reports
+                </h1>
+                <p className="text-slate-400 text-xs font-semibold">
+                  Track and monitor the status lifecycle of your submitted reports.
+                </p>
+              </div>
+
+              <Card variant="default" className="shadow-2xl">
+                {/* Search & Filter Header */}
+                <div className="p-6 border-b border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/15 rounded-t-3xl">
+                  <span className="text-[10px] font-bold text-slate-405 uppercase tracking-widest font-mono">
+                    Filter by Status
+                  </span>
+                  
+                  <div className="flex flex-wrap gap-1.5 bg-slate-955 p-1 rounded-2xl border border-slate-900">
+                    {["All", "Submitted", "Assigned", "In Progress", "Resolved", "Needs Rework", "Awaiting Evidence", "Verified & Closed"].map(st => {
+                      const isActive = personalFilterStatus === st;
+                      return (
+                        <button
+                          key={st}
+                          onClick={() => setPersonalFilterStatus(st)}
+                          className={`px-3 py-1.5 text-[10px] font-bold rounded-xl transition-all cursor-pointer font-mono ${
+                            isActive 
+                              ? "bg-slate-800 text-white shadow-sm"
+                              : "text-slate-500 hover:text-slate-350"
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="p-6 divide-y divide-slate-900/60 bg-slate-950/20 rounded-b-3xl">
+                  {filteredPersonalIssues.length === 0 ? (
+                    <div className="p-12 text-center text-xs text-slate-500 font-semibold leading-relaxed">
+                      No reports found matching this status filter.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {filteredPersonalIssues.map(issue => (
+                        <Card
+                          key={issue.id}
+                          variant="interactive"
+                          onClick={() => setSelectedIssue(issue)}
+                          className="p-5 space-y-4 hover:translate-y-[-2px] transition-all hover:border-indigo-500/20"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-start space-x-3.5">
+                              <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-850 flex items-center justify-center text-slate-400 shrink-0">
+                                {getCategoryIcon(issue.category)}
+                              </div>
+                              <div>
+                                <h3 className="font-extrabold text-sm text-white tracking-tight leading-tight">
+                                  {issue.title}
+                                </h3>
+                                <div className="flex items-center space-x-2 mt-1.5 flex-wrap gap-y-1">
+                                  <Badge>{issue.category}</Badge>
+                                  <Badge variant={getSeverityVariant(issue.severity)}>
+                                    {issue.severity}
+                                  </Badge>
+                                  <span className="text-[10px] text-slate-505 font-mono">
+                                    Filed: {new Date(issue.createdAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <Badge variant={getStatusVariant(issue.status)}>
+                              {issue.status}
+                            </Badge>
+                          </div>
+
+                          {/* Prominent Status Timeline */}
+                          <div className="pt-3.5 border-t border-slate-900/60 space-y-2">
+                            <div className="flex items-center justify-between text-[9px] text-slate-405 font-mono uppercase tracking-wider">
+                              <span>Status Timeline</span>
+                              <span className="text-indigo-405 font-extrabold">{issue.status}</span>
+                            </div>
+                            
+                            <div className="relative w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                              <div 
+                                className="absolute top-0 bottom-0 left-0 bg-indigo-500 rounded-full transition-all duration-300"
+                                style={{ width: `${((getStatusStep(issue.status) + 1) / 7) * 100}%` }}
+                              />
+                            </div>
+                            
+                            <div className="flex justify-between text-[8px] font-extrabold text-slate-500 uppercase tracking-widest font-mono pt-1">
+                              <span>Reported</span>
+                              <span>In Progress</span>
+                              <span>Resolved</span>
+                              <span>Closed</span>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* TAB 3: NEARBY MAP */}
+          {activeTab === "nearby" && (
+            <motion.div
+              key="nearby"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6"
+            >
+              <div className="space-y-1">
+                <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                  Nearby Incident Telemetry
+                </h1>
+                <p className="text-slate-400 text-xs font-semibold">
+                  Inspect geocoded incident reports logged across your municipal sectors.
+                </p>
+              </div>
+
+              <Card variant="default" className="p-6 space-y-4 shadow-2xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <MapPin className="w-4.5 h-4.5 text-indigo-405 animate-pulse" />
+                    <h3 className="text-sm font-extrabold text-white">Live Smart City Telemetry Grid</h3>
+                  </div>
+                  <label className="flex items-center space-x-2 text-xs font-semibold text-slate-400 cursor-pointer select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={showMapResolved}
+                      onChange={(e) => setShowMapResolved(e.target.checked)}
+                      className="rounded border-slate-800 bg-slate-955 text-indigo-505 focus:ring-indigo-500/30"
+                    />
+                    <span>Show Resolved & Closed Tickets (Historical)</span>
+                  </label>
+                </div>
+
+                <div className="h-[550px] w-full rounded-2xl overflow-hidden border border-slate-900 shadow-inner" style={{ minHeight: "500px" }}>
+                  <IssueMap
+                    issues={issues.filter(i => showMapResolved ? true : (i.status !== "Resolved" && i.status !== "Verified & Closed" && i.status !== "Closed"))}
+                    onSelectIssue={(iss) => setSelectedIssue(iss)}
+                    selectedIssueId={selectedIssue?.id}
+                  />
+                </div>
+
+                <p className="text-[10px] text-slate-500 leading-relaxed text-center font-medium font-mono">
+                  Coordinates map sync telemetry updates dynamically. Markers connect to local resolution proof databases.
+                </p>
+              </Card>
+            </motion.div>
+          )}
+
+        </AnimatePresence>
       {/* Side Slide-Over Modal for viewing issue details, AI analysis, and dispatch actions */}
       <AnimatePresence>
         {selectedIssue && (
@@ -1644,7 +1445,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
               animate={{ opacity: 0.6 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedIssue(null)}
-              className="fixed inset-0 bg-slate-955/80 backdrop-blur-sm z-50 cursor-pointer"
+              className="fixed inset-0 bg-slate-955/85 backdrop-blur-sm z-50 cursor-pointer"
             />
 
             {/* Slide over */}
@@ -1684,7 +1485,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="absolute bottom-3 left-3 bg-slate-950/90 backdrop-blur-sm border border-slate-900 text-[10px] font-bold text-slate-205 px-2.5 py-1 rounded-full flex items-center gap-1">
+                    <div className="absolute bottom-3 left-3 bg-slate-955/90 backdrop-blur-sm border border-slate-900 text-[10px] font-bold text-slate-205 px-2.5 py-1 rounded-full flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5 text-indigo-400" />
                       <span>{selectedIssue.location}</span>
                     </div>
@@ -1711,7 +1512,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                 {/* Interactive Triage Progress Timeline */}
                 <div className="bg-slate-900/10 border border-slate-900 rounded-3xl p-5 space-y-4">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Triage Progress Timeline</span>
-                  <div className="relative w-full overflow-x-auto no-scrollbar py-4 px-2 bg-slate-950/45 rounded-2xl border border-slate-900/80">
+                  <div className="relative w-full overflow-x-auto no-scrollbar py-4 px-2 bg-slate-955/45 rounded-2xl border border-slate-900/80">
                     <div className="flex items-center justify-between min-w-[640px] relative px-4">
                       {/* Connector Line Background */}
                       <div className="absolute top-[18px] left-8 right-8 h-0.5 bg-slate-800/80 z-0" />
@@ -1757,7 +1558,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                               {isCompleted ? (
                                 <Check className="w-4 h-4 stroke-[3]" />
                               ) : isActive && stage.value === "AI Verification" ? (
-                                <Brain className="w-4 h-4 text-indigo-400 animate-bounce" />
+                                <Brain className="w-4 h-4 text-indigo-405 animate-bounce" />
                               ) : (
                                 <span className="text-[11px] font-bold font-mono">{idx + 1}</span>
                               )}
@@ -1779,7 +1580,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                               )}
 
                               {isDisabledClose && (
-                                <span className="mt-0.5 text-[6.5px] bg-red-950/20 text-red-400 px-1 py-0.2 rounded border border-red-900/30 uppercase font-bold font-mono">
+                                <span className="mt-0.5 text-[6.5px] bg-red-955/20 text-red-400 px-1 py-0.2 rounded border border-red-900/30 uppercase font-bold font-mono">
                                   Locked
                                 </span>
                               )}
@@ -1793,7 +1594,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
 
                 {/* Description */}
                 <div className="space-y-2">
-                  <span className="text-xs font-bold text-slate-550 uppercase tracking-wider block font-mono">Description</span>
+                  <span className="text-xs font-bold text-slate-555 uppercase tracking-wider block font-mono">Description</span>
                   <p className="text-sm text-slate-305 bg-slate-900/40 border border-slate-900 p-4 rounded-2xl leading-relaxed">
                     {selectedIssue.description}
                   </p>
@@ -1818,7 +1619,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                           <span>Flagged as AI Duplicate ({selectedIssue.duplicateProbability}%)</span>
                         </div>
-                        <p className="text-slate-400">
+                        <p className="text-slate-405">
                           This issue has been identified as a likely duplicate. System recommends consolidating repairs under the original claim.
                         </p>
                       </div>
@@ -1844,9 +1645,9 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                   </div>
                 </Card>
 
-                {/* AI Dispatch Assessment Overhauled as ChatGPT-style Assistant Card */}
+                {/* AI Dispatch Assessment Card */}
                 {selectedIssue.aiAnalysis && (
-                  <div className="bg-slate-950 border border-indigo-500/15 rounded-2xl p-5 space-y-4 shadow-xl">
+                  <div className="bg-slate-955 border border-indigo-500/15 rounded-2xl p-5 space-y-4 shadow-xl">
                     <div className="flex items-center justify-between border-b border-slate-900 pb-3">
                       <div className="flex items-center space-x-2.5">
                         <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
@@ -1861,12 +1662,12 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
 
                     <div className="grid grid-cols-2 gap-3 text-[10px] font-mono">
                       <div className="bg-slate-900/60 border border-slate-900 p-2.5 rounded-xl">
-                        <span className="text-slate-500 block uppercase font-bold">Category</span>
+                        <span className="text-slate-505 block uppercase font-bold">Category</span>
                         <span className="font-bold text-white mt-0.5 block">{selectedIssue.aiAnalysis.category}</span>
                       </div>
                       <div className="bg-slate-900/60 border border-slate-900 p-2.5 rounded-xl">
-                        <span className="text-slate-500 block uppercase font-bold">Estimated Cost</span>
-                        <span className="font-bold text-white mt-0.5 block">{selectedIssue.aiAnalysis.estimatedCost}</span>
+                        <span className="text-slate-505 block uppercase font-bold">Severity</span>
+                        <span className="font-bold text-white mt-0.5 block">{selectedIssue.severity}</span>
                       </div>
                     </div>
 
@@ -1875,7 +1676,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                       <p>{selectedIssue.aiAnalysis.explanation}</p>
                     </div>
 
-                    <div className="bg-indigo-950/20 border border-indigo-900/30 p-3 rounded-xl space-y-2">
+                    <div className="bg-indigo-955/20 border border-indigo-900/30 p-3 rounded-xl space-y-2">
                       <span className="text-[9px] font-extrabold text-indigo-350 uppercase tracking-wider font-mono block">Recommended Action</span>
                       <p className="text-slate-100 font-bold text-xs leading-normal">
                         {selectedIssue.aiAnalysis.recommendedAction}
@@ -1883,215 +1684,124 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
                     </div>
 
                     <div className="flex justify-between items-center text-[9px] text-slate-500 border-t border-slate-900/80 pt-2.5 font-mono">
-                      <span>Triage: Priority Code {selectedIssue.aiAnalysis.priority}</span>
+                      <span>Verification: Automated Triage Completed</span>
                       <span>{new Date(selectedIssue.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
                 )}
 
-                {/* AI Priority Agent Block Overhauled as ChatGPT-style Assistant Card */}
-                <div className="bg-slate-950 border border-indigo-500/15 rounded-2xl p-5 space-y-4 shadow-xl">
-                  <div className="flex items-center justify-between border-b border-slate-900 pb-3">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                        <Sparkles className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs font-extrabold text-white tracking-tight">AI Priority Agent</span>
-                    </div>
-                    <Button
-                      onClick={() => runPriorityAgent(selectedIssue)}
-                      loading={isCalculatingPriority}
-                      variant="outline"
-                      size="sm"
-                      className="px-2.5 py-1 h-7 text-[10px] font-bold"
-                    >
-                      {selectedIssue.priorityScore !== undefined ? "Re-evaluate" : "Calculate"}
-                    </Button>
-                  </div>
-
-                  {/* Skeletons loader if priority agent is running */}
-                  {isCalculatingPriority ? (
-                    <div className="space-y-3 animate-pulse py-1">
-                      <div className="h-8 bg-slate-900 rounded"></div>
-                      <div className="h-3 bg-slate-900 rounded w-5/6"></div>
-                      <div className="h-3 bg-slate-900 rounded w-2/3"></div>
-                    </div>
-                  ) : selectedIssue.priorityScore !== undefined ? (
-                    <div className="space-y-3 text-xs">
-                      <div className="flex items-center justify-between bg-slate-900/60 border border-slate-900 p-3 rounded-xl font-mono">
-                        <div>
-                          <span className="text-[9px] text-indigo-305 font-bold uppercase block">Priority Level</span>
-                          <span className={`text-xs font-black flex items-center gap-1 mt-0.5 ${
-                            selectedIssue.priorityLevel === "Critical" ? "text-red-400" :
-                            selectedIssue.priorityLevel === "High" ? "text-orange-400" :
-                            selectedIssue.priorityLevel === "Medium" ? "text-amber-400" : "text-emerald-400"
-                          }`}>
-                            {selectedIssue.priorityLevel}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-[9px] text-indigo-305 font-bold uppercase block">Triage Score</span>
-                          <span className="text-sm font-black text-indigo-100 block mt-0.5">
-                            {selectedIssue.priorityScore} / 100
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Score Bar */}
-                      <div className="space-y-1">
-                        <div className="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all duration-500 ${
-                              selectedIssue.priorityScore >= 81 ? "bg-red-500" :
-                              selectedIssue.priorityScore >= 61 ? "bg-orange-500" :
-                              selectedIssue.priorityScore >= 41 ? "bg-amber-500" : "bg-emerald-500"
-                            }`}
-                            style={{ width: `${selectedIssue.priorityScore}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {selectedIssue.priorityReasoning && (
-                        <div className="space-y-1 pt-1.5 leading-relaxed text-slate-300 font-semibold italic">
-                          <span className="text-[9px] font-bold text-indigo-300 uppercase tracking-wider font-mono not-italic block">Dispatch Rationale</span>
-                          <p>"{selectedIssue.priorityReasoning}"</p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 bg-slate-900/30 border border-slate-900 rounded-2xl space-y-2">
-                      <p className="text-xs text-slate-400">No AI Priority assigned yet.</p>
-                      <p className="text-[9.5px] text-slate-500 max-w-[285px] mx-auto font-semibold leading-normal font-mono">
-                        Evaluate Defect class, Severity, and Issue age with Gemini to assign priority.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* AI Resolution Verification Block Overhauled as ChatGPT-style Assistant Card */}
+                {/* AI Resolution Verification Block Assistant Card */}
                 <div className="space-y-4 pt-4 border-t border-slate-900">
-                  <span className="text-xs font-bold text-slate-550 uppercase tracking-wider block font-mono">AI Resolution Verification</span>
+                  <span className="text-xs font-bold text-slate-555 uppercase tracking-wider block font-mono">Municipal Repair Verification</span>
 
                   {selectedIssue.resolutionVerification ? (
-                    <div className="bg-slate-950 border border-indigo-500/15 rounded-2xl p-5 space-y-4 shadow-xl">
+                    <div className="bg-slate-955 border border-indigo-500/15 rounded-2xl p-5 space-y-4 shadow-xl font-sans relative overflow-hidden">
                       <div className="flex items-center justify-between border-b border-slate-900 pb-3">
                         <div className="flex items-center space-x-2.5">
                           <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-emerald-450">
                             <ShieldCheck className="w-4 h-4" />
                           </div>
-                          <span className="text-xs font-extrabold text-white tracking-tight">Gemini Vision Verification</span>
+                          <span className="text-xs font-extrabold text-white tracking-tight">Municipal Verification</span>
                         </div>
-                        <Badge variant="brand" className="font-mono text-[9px]">
-                          Match Rate: {selectedIssue.resolutionVerification.confidenceScore}%
+                        <Badge variant={getStatusVariant(selectedIssue.status)} className="font-mono text-[9px] uppercase font-bold">
+                          {selectedIssue.status === "Verified & Closed" ? "Verified" : selectedIssue.status}
                         </Badge>
                       </div>
 
-                      <div className="space-y-1 text-slate-350 font-semibold leading-relaxed text-xs">
-                        <span className="text-[9px] font-bold text-indigo-300 uppercase tracking-wide font-mono block">Verification Audit Explanation</span>
-                        <p>{selectedIssue.resolutionVerification.explanation}</p>
-                      </div>
-
-                      {selectedIssue.resolutionImage && (
-                        <div className="space-y-1.5">
-                          <span className="text-[9px] font-bold text-slate-500 uppercase font-mono block">Post-Repair Evidence</span>
-                          <div className="relative rounded-xl overflow-hidden border border-slate-900 aspect-video bg-slate-900">
-                            <img 
-                              src={selectedIssue.resolutionImage} 
-                              alt="Resolution proof" 
-                              className="w-full h-full object-cover"
-                              referrerPolicy="no-referrer"
-                            />
+                      {/* Before / After comparative thumbnails */}
+                      {selectedIssue.imageUrl && selectedIssue.resolutionImage && (
+                        <div className="grid grid-cols-2 gap-3.5">
+                          <div className="space-y-1">
+                            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-mono block">Original Evidence</span>
+                            <div className="relative rounded-lg overflow-hidden border border-slate-900 aspect-video bg-slate-900">
+                              <ImageWithFallback 
+                                src={selectedIssue.imageUrl} 
+                                alt="Before" 
+                                label="Original" 
+                                onError={() => setOriginalImageError(true)}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-mono block">Repair Evidence</span>
+                            <div className="relative rounded-lg overflow-hidden border border-slate-900 aspect-video bg-slate-900">
+                              <ImageWithFallback 
+                                src={selectedIssue.resolutionImage || ""} 
+                                alt="After" 
+                                label="Repair" 
+                                onError={() => setRepairImageError(true)}
+                              />
+                            </div>
                           </div>
                         </div>
                       )}
 
-                      <div className="text-[9px] text-slate-500 font-mono flex justify-between items-center pt-2.5 border-t border-slate-900/80">
-                        <span>Outcome: <b className="text-slate-300">{selectedIssue.resolutionVerification.status}</b></span>
-                        <button 
-                          onClick={() => {
-                            updateFirestoreIssue(selectedIssue.id, {
-                              resolutionVerification: undefined,
-                              resolutionImage: undefined
-                            }).then(() => {
-                              setSelectedIssue({
-                                ...selectedIssue,
-                                resolutionVerification: undefined,
-                                resolutionImage: undefined
-                              });
-                            });
-                          }}
-                          className="text-indigo-400 hover:text-indigo-300 font-bold hover:underline cursor-pointer"
-                        >
-                          Re-Verify
-                        </button>
+                      {/* Verification checklists */}
+                      <div className="p-3.5 bg-slate-900/40 border border-slate-900 rounded-xl space-y-2 text-[10px] text-slate-300 font-semibold leading-relaxed">
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block font-mono">Official Checkpoints</span>
+                        <div className="grid grid-cols-1 gap-1 pl-1">
+                          {[
+                            { checked: selectedIssue.resolutionVerification.landmarkMatch === 100, label: "Same incident location verified" },
+                            { checked: selectedIssue.resolutionVerification.infrastructureMatch === 100, label: "Correct infrastructure/issue repaired" },
+                            { checked: selectedIssue.resolutionVerification.sceneMatch === 100, label: "Repair quality standards acceptable" },
+                            { checked: selectedIssue.resolutionVerification.locationMatch === 100, label: "Before/After inspection images are clear" },
+                            { checked: selectedIssue.resolutionVerification.issueResolution === 100, label: "Issue completely resolved & clean" }
+                          ].map((item, idx) => (
+                            <div key={idx} className="flex items-center space-x-2">
+                              <span className={`w-3.5 h-3.5 rounded flex items-center justify-center border font-mono text-[8px] font-black ${item.checked ? 'border-emerald-500 text-emerald-450 bg-emerald-500/10' : 'border-slate-800 text-slate-600 bg-slate-950'}`}>
+                                {item.checked ? "✓" : "✗"}
+                              </span>
+                              <span className={item.checked ? 'text-slate-200' : 'text-slate-500 line-through'}>{item.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 text-slate-300 leading-relaxed text-xs pt-2 border-t border-slate-900/60">
+                        <span className="text-[9px] font-bold text-indigo-305 uppercase tracking-wide font-mono block font-mono">Verification Notes</span>
+                        <p className="italic bg-slate-900/20 p-2.5 rounded-xl border border-slate-900/45 text-slate-300 font-semibold">
+                          "{selectedIssue.resolutionVerification.explanation || 'No notes provided by official.'}"
+                        </p>
+                      </div>
+
+                      {/* Citizen status experiences */}
+                      <div className="p-3 bg-indigo-950/20 border border-indigo-500/15 text-indigo-300 text-xs font-semibold rounded-xl flex items-center gap-2">
+                        <ShieldCheck className="w-4.5 h-4.5 text-indigo-400 shrink-0" />
+                        <span>
+                          {selectedIssue.status === "Verified & Closed" ? "Verified by Municipal Official" :
+                           selectedIssue.status === "Needs Rework" ? "Additional repair work is required." :
+                           selectedIssue.status === "Awaiting Evidence" ? "Municipal team is uploading updated repair documentation." :
+                           "Verification workflow active."}
+                        </span>
                       </div>
                     </div>
-                  ) : getStatusStep(selectedIssue.status) >= 4 ? (
-                    <div className="bg-slate-900/10 border border-slate-900 rounded-2xl p-4 space-y-3">
-                      <p className="text-xs text-slate-450 text-center leading-relaxed font-medium">
-                        Upload a post-repair verification image to let Gemini Vision confirm the resolution status.
+                  ) : selectedIssue.status === "Resolved" ? (
+                    <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-5 text-center space-y-3 font-sans">
+                      <Clock className="w-8 h-8 text-indigo-405 mx-auto animate-pulse" />
+                      <h5 className="text-xs font-extrabold text-white">Pending Dispatch Review</h5>
+                      <p className="text-[11px] text-slate-400 leading-relaxed font-semibold">
+                        The municipal crew has completed the repair work. The ticket is currently awaiting manual review and verification by an authorized Municipal Official.
                       </p>
-
-                      {resolutionBase64 ? (
-                        <div className="space-y-3">
-                          <div className="relative rounded-xl overflow-hidden border border-slate-900 aspect-video bg-slate-900">
-                            <img 
-                              src={resolutionBase64} 
-                              alt="Resolution preview" 
-                              className="w-full h-full object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                            <button
-                              onClick={() => {
-                                setResolutionFile(null);
-                                setResolutionBase64("");
-                              }}
-                              className="absolute top-2 right-2 bg-slate-950/80 hover:bg-slate-950 text-white p-1 rounded-full text-[10px] w-6 h-6 flex items-center justify-center transition-colors cursor-pointer"
-                            >
-                              ✕
-                            </button>
-                          </div>
-
-                          {resolutionError && (
-                            <p className="text-xs text-red-400 font-semibold text-center">{resolutionError}</p>
-                          )}
-
-                          <Button
-                            onClick={handleVerifyResolution}
-                            loading={verifyingResolution}
-                            variant="primary"
-                            className="w-full py-2.5 text-xs rounded-xl"
-                          >
-                            Run AI Verification
-                          </Button>
-                        </div>
-                      ) : (
-                        <div 
-                          onClick={() => resolutionFileInputRef.current?.click()}
-                          className="border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-2xl p-6 text-center cursor-pointer transition-colors space-y-2 bg-slate-950/30 hover:bg-slate-950/50"
-                        >
-                          <Upload className="w-6 h-6 text-slate-500 mx-auto" />
-                          <div className="text-xs text-slate-300">
-                            <span className="font-bold text-indigo-400 hover:underline">Click to upload</span> or drag and drop
-                          </div>
-                          <p className="text-[10px] text-slate-500 font-mono">PNG, JPG, WEBP up to 5MB</p>
-                          <input 
-                            type="file" 
-                            ref={resolutionFileInputRef}
-                            onChange={handleResolutionFileChange}
-                            accept="image/*"
-                            className="hidden" 
-                          />
-                        </div>
-                      )}
-                      
-                      {resolutionError && !resolutionBase64 && (
-                        <p className="text-xs text-red-400 font-semibold text-center">{resolutionError}</p>
-                      )}
+                    </div>
+                  ) : selectedIssue.status === "Needs Rework" ? (
+                    <div className="bg-amber-950/10 border border-amber-900/20 rounded-2xl p-5 text-center space-y-3 font-sans">
+                      <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto" />
+                      <h5 className="text-xs font-extrabold text-white">Additional Work Required</h5>
+                      <p className="text-[11px] text-slate-400 leading-relaxed font-semibold">
+                        Additional repair work is required. The repair has been sent back for rework by the Municipal Official.
+                      </p>
+                    </div>
+                  ) : selectedIssue.status === "Awaiting Evidence" ? (
+                    <div className="bg-sky-950/10 border border-sky-900/20 rounded-2xl p-5 text-center space-y-3 font-sans">
+                      <Info className="w-8 h-8 text-sky-400 mx-auto" />
+                      <h5 className="text-xs font-extrabold text-white">Awaiting Updated Evidence</h5>
+                      <p className="text-[11px] text-slate-400 leading-relaxed font-semibold">
+                        The municipal team is uploading updated repair documentation for verification.
+                      </p>
                     </div>
                   ) : (
-                    <div className="bg-slate-905/30 border border-slate-900 rounded-2xl p-4 text-center text-xs text-slate-500 font-semibold font-sans py-6">
-                      Resolution verification will become available once the issue status reaches <span className="text-indigo-400 font-bold">Resolved</span>.
+                    <div className="bg-slate-905/30 border border-slate-900 rounded-2xl p-4 text-center text-xs text-slate-505 font-semibold font-sans py-6">
+                      Resolution verification will become available once the issue status reaches <span className="text-indigo-405 font-bold">Resolved</span>.
                     </div>
                   )}
                 </div>
@@ -2145,6 +1855,7 @@ export default function DashboardPage({ onNavigate, currentUser, onLogout }: Das
           </>
         )}
       </AnimatePresence>
+      </main>
     </div>
   );
 }
